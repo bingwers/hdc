@@ -6,39 +6,19 @@
 #include "hypervector.c"
 #include "pthread.h"
 
-#define HYPERVECTOR_SIZE (10000)
+
 #define N_LABELS (10)
-
-Hypervector_ClassifySet train(Hypervector_Basis * basis, uint8_t ** images,
-    uint8_t * labels, size_t nImages, size_t imageSize) {
-
-    Hypervector_TrainSet trainSet;
-    hypervector_newTrainSet(&trainSet, HYPERVECTOR_SIZE, N_LABELS);
-
-    size_t numTrain = 10000;
-    if (numTrain > nImages) {
-        numTrain = nImages;
-    }
-
-    size_t i; for (i = 0; i < numTrain; i++) {
-        Hypervector_Hypervector vector = hypervector_encode(images[i], basis);
-
-        hypervector_train(&trainSet, &vector, labels[i]);
-
-        hypervector_deleteVector(&vector);
-        
-        printf("\rTraining... %d/%d", (int)i, (int)numTrain);
-        fflush(stdout);
-    }
-
-    Hypervector_ClassifySet classifySet;
-    hypervector_newClassifySet(&classifySet, &trainSet, 0);
-
-    hypervector_deleteTrainSet(&trainSet);
-    return classifySet;
-}
-
 #define N_THREADS (8)
+
+#define N_TRAIN_SAMPLES (60000)
+#define N_TEST_SAMPLES (10000)
+
+#define HYPERVECTOR_SIZE (10000)
+#define INPUT_DOWNSCALE_FACTOR (2) // 1,2, or 3 practical
+#define INPUT_QUANTIZATION_LEVELS (2) // max = 256
+#define CLASS_VECTOR_QUANTIZATION_LEVELS (2) // should be multiple of 2
+#define RETRAIN_ITERATIONS (3)
+
 
 struct TrainJob {
     Hypervector_Basis * basis;
@@ -51,6 +31,16 @@ struct TrainJob {
     size_t startImage;
     size_t endImage;
     int * nWrong;
+};
+
+struct TestJob {
+    Hypervector_ClassifySet * classifySet;
+    Hypervector_Basis * basis;
+    uint8_t ** images;
+    uint8_t * labels;
+    int localNCorrect;
+    size_t imageStart;
+    size_t imageEnd;
 };
 
 void * parallelTrainFunc(void * arg) {
@@ -142,59 +132,24 @@ Hypervector_ClassifySet trainAndRetrain(Hypervector_Basis * basis, uint8_t ** im
     Hypervector_ClassifySet classifySet;
     hypervector_newTrainSet(&trainSet, HYPERVECTOR_SIZE, N_LABELS);
 
-    size_t numTrain = 60000;
-    int numRetrain = 3;
-    int quantization = 1;
+    size_t numTrain = N_TRAIN_SAMPLES;
+    int numRetrain = RETRAIN_ITERATIONS;
+    int quantization = CLASS_VECTOR_QUANTIZATION_LEVELS / 2;
 
     if (numTrain > nImages) {
         numTrain = nImages;
     }
 
     size_t i;
-    
-    /*for (i = 0; i < numTrain; i++) {
-        Hypervector_Hypervector vector = hypervector_encode(images[i], basis);
 
-        hypervector_train(&trainSet, &vector, labels[i]);
-
-        hypervector_deleteVector(&vector);
-        
-        printf("\rTraining... %d/%d", (int)i, (int)numTrain);
-        fflush(stdout);
-    }*/
-
-    // ----------------------------------------------------
-
+    // Training
     printf("Training... "); fflush(stdout);
     parallelTrain(basis, &trainSet, &classifySet, labels, images, false, numTrain);
     printf("done\n");
     hypervector_newClassifySet(&classifySet, &trainSet, quantization);
 
+    // Retraining
     int r; for (r = 0; r < numRetrain; r++) {
-        /*int nCorrect = 0;
-
-        size_t i; for (i = 0; i < numTrain; i++) {
-            Hypervector_Hypervector vector = hypervector_encode(images[i], basis);
-
-            size_t classification = hypervector_classify(&classifySet, &vector);
-            if (classification != (size_t)labels[i]) {
-                hypervector_train(&trainSet, &vector, labels[i]);
-                hypervector_untrain(&trainSet, &vector, classification);
-            }
-            else {
-                nCorrect++;
-            }
-
-            hypervector_deleteVector(&vector);
-            
-            printf("\rRetraining [%d]... %d/%d", r, (int)i, (int)numTrain);
-            fflush(stdout);
-        }
-
-        printf("\nAccuracy %d/%d\n", nCorrect, (int)numTrain);*/
-
-        // ------------------------------------------------------------------
-
         printf("Retraining %d/%d... ", r+1, numRetrain); fflush(stdout);
         int nCorrect = parallelTrain(basis, &trainSet, &classifySet, labels,
                                             images, true, numTrain);
@@ -208,16 +163,6 @@ Hypervector_ClassifySet trainAndRetrain(Hypervector_Basis * basis, uint8_t ** im
     hypervector_deleteTrainSet(&trainSet);
     return classifySet;
 }
-
-struct TestJob {
-    Hypervector_ClassifySet * classifySet;
-    Hypervector_Basis * basis;
-    uint8_t ** images;
-    uint8_t * labels;
-    int localNCorrect;
-    size_t imageStart;
-    size_t imageEnd;
-};
 
 void * parallelTestFunc(void * arg) {
     struct TestJob * testJob = (struct TestJob *)arg;
@@ -244,9 +189,12 @@ void * parallelTestFunc(void * arg) {
 }
 
 void test(Hypervector_ClassifySet * classifySet, Hypervector_Basis * basis,
-    uint8_t ** images, uint8_t * labels) {
+    uint8_t ** images, uint8_t * labels, size_t nImages) {
 
-    int nTest = 10000;
+    int nTest = N_TEST_SAMPLES;
+    if (nTest > nImages) {
+        nTest = nImages;
+    }
 
     struct TestJob testJobs[N_THREADS];
     pthread_t threads[N_THREADS];
@@ -274,20 +222,6 @@ void test(Hypervector_ClassifySet * classifySet, Hypervector_Basis * basis,
         nCorrect += testJobs[i].localNCorrect;
     }
 
-    /*int nCorrect = 0;    
-    size_t i; for (i = 0; i < 10000; i++) {
-        Hypervector_Hypervector vector = hypervector_encode(images[i], basis);
-
-        size_t label = hypervector_classify(classifySet, &vector);
-        printf("Test %d:  %d %d\n", (int)i, (int)labels[i], (int)label);
-
-        if ((int)labels[i] == (int)label) {
-            nCorrect++;
-        }
-
-        hypervector_deleteVector(&vector);
-    }*/
-
     printf("done\nNumber Correct: %d\n", nCorrect);
 }
 
@@ -298,7 +232,7 @@ int main() {
     unsigned char ** trainImages = mnist_loadImages("mnist/train-images.idx3-ubyte",
         &nTrainImages, &width, &height);
     unsigned char ** downscaledTrainImages = mnist_resizeImages(trainImages,
-        nTrainImages, &width, &height, 2);
+        nTrainImages, &width, &height, INPUT_DOWNSCALE_FACTOR);
 
     unsigned int nTestItems, nTestImages;
     unsigned char * testLabels = mnist_loadLabels("mnist/t10k-labels.idx1-ubyte",
@@ -306,21 +240,20 @@ int main() {
     unsigned char ** testImages = mnist_loadImages("mnist/t10k-images.idx3-ubyte",
         &nTestImages, &width, &height);
     unsigned char ** downscaledTestImages = mnist_resizeImages(testImages,
-        nTestImages, &width, &height, 2);
+        nTestImages, &width, &height, INPUT_DOWNSCALE_FACTOR);
 
     printf("Loaded images\n");
     unsigned int imageSize = width * height;
 
     Hypervector_Basis basis;
-    hypervector_newBasis(&basis, HYPERVECTOR_SIZE, imageSize);
+    hypervector_newBasis(&basis, HYPERVECTOR_SIZE, imageSize, INPUT_QUANTIZATION_LEVELS);
     
     Hypervector_ClassifySet classifySet =
-        //train(&basis, downscaledTrainImages, trainLabels, nTrainImages, imageSize);
         trainAndRetrain(&basis, downscaledTrainImages, trainLabels, nTrainImages, imageSize);
 
     printf("Training Done\n");
 
-    test(&classifySet, &basis, downscaledTestImages, testLabels);
+    test(&classifySet, &basis, downscaledTestImages, testLabels, nTestImages);
 
     hypervector_deleteBasis(&basis);
     hypervector_deleteClassifySet(&classifySet);
