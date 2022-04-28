@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include "mnist.c"
 #include "hypervector.c"
+#include "pthread.h"
 
 #define HYPERVECTOR_SIZE (10000)
 #define N_LABELS (10)
@@ -37,10 +38,108 @@ Hypervector_ClassifySet train(Hypervector_Basis * basis, uint8_t ** images,
     return classifySet;
 }
 
+#define N_THREADS (8)
+
+struct TrainJob {
+    Hypervector_Basis * basis;
+    Hypervector_TrainSet * trainSet;
+    Hypervector_ClassifySet * classifySet;
+    uint8_t * labels;
+    uint8_t ** images;
+    bool retrain;
+    pthread_mutex_t * mutex;
+    size_t startImage;
+    size_t endImage;
+    int * nWrong;
+};
+
+void * parallelTrainFunc(void * arg) {
+    Hypervector_Basis * basis = ((struct TrainJob*)arg) -> basis;
+    Hypervector_TrainSet * trainSet = ((struct TrainJob*)arg) -> trainSet;
+    Hypervector_ClassifySet * classifySet = ((struct TrainJob*)arg) -> classifySet;
+    uint8_t * labels = ((struct TrainJob*)arg) -> labels;
+    uint8_t ** images = ((struct TrainJob*)arg) -> images;
+    bool retrain = ((struct TrainJob*)arg) -> retrain;
+    pthread_mutex_t * mutex = ((struct TrainJob*)arg) -> mutex;
+    size_t startImage = ((struct TrainJob*)arg) -> startImage;
+    size_t endImage = ((struct TrainJob*)arg) -> endImage;
+    uint32_t * nWrong = ((struct TrainJob*)arg) -> nWrong;
+
+    size_t i; for (i = startImage; i < endImage; i++) {
+        Hypervector_Hypervector vector = hypervector_encode(images[i], basis);
+
+        if (retrain) {
+            size_t classification = hypervector_classify(classifySet, &vector);
+            if (classification != labels[i]) {
+                pthread_mutex_lock(mutex);
+                hypervector_train(trainSet, &vector, labels[i]);
+                hypervector_untrain(trainSet, &vector, classification);
+                pthread_mutex_unlock(mutex);
+                (*nWrong)++;
+            }
+        }
+        else {
+            pthread_mutex_lock(mutex);
+            hypervector_train(trainSet, &vector, labels[i]);
+            pthread_mutex_unlock(mutex);
+        }
+
+        hypervector_deleteVector(&vector);
+    }
+
+    return NULL;
+}
+
+int parallelTrain(
+    Hypervector_Basis * basis,
+    Hypervector_TrainSet * trainSet,
+    Hypervector_ClassifySet * classifySet,
+    uint8_t * labels,
+    uint8_t ** images,
+    bool retrain,
+    size_t nImages
+) {
+    pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+
+    struct TrainJob trainJobs[N_THREADS];
+    pthread_t threads[N_THREADS];
+    int nWrong = 0;
+
+    int i; for (i = 0; i < N_THREADS; i++) {
+        trainJobs[i].basis = basis;
+        trainJobs[i].trainSet = trainSet;
+        trainJobs[i].classifySet = classifySet;
+        trainJobs[i].labels = labels;
+        trainJobs[i].images = images;
+        trainJobs[i].retrain = retrain;
+        trainJobs[i].mutex = &mutex;
+        trainJobs[i].nWrong = &nWrong;
+
+        trainJobs[i].startImage = nImages * i / N_THREADS;
+        if (i == N_THREADS - 1) {
+            trainJobs[i].endImage = nImages;
+        }
+        else {
+            trainJobs[i].endImage = nImages * (i + 1) / N_THREADS;
+        }
+    }
+
+    for (i = 0; i < N_THREADS; i++) {
+        pthread_create(&threads[i], NULL, parallelTrainFunc, &trainJobs[i]);
+    }
+
+    for (i = 0; i < N_THREADS; i++) {
+        pthread_join(threads[i], NULL);
+    }
+
+    return (nImages - nWrong);
+}
+
 Hypervector_ClassifySet trainAndRetrain(Hypervector_Basis * basis, uint8_t ** images,
     uint8_t * labels, size_t nImages, size_t imageSize) {
 
     Hypervector_TrainSet trainSet;
+    Hypervector_ClassifySet classifySet;
     hypervector_newTrainSet(&trainSet, HYPERVECTOR_SIZE, N_LABELS);
 
     size_t numTrain = 60000;
@@ -48,7 +147,7 @@ Hypervector_ClassifySet trainAndRetrain(Hypervector_Basis * basis, uint8_t ** im
         numTrain = nImages;
     }
 
-    size_t i; for (i = 0; i < numTrain; i++) {
+    size_t i; /*for (i = 0; i < numTrain; i++) {
         Hypervector_Hypervector vector = hypervector_encode(images[i], basis);
 
         hypervector_train(&trainSet, &vector, labels[i]);
@@ -57,13 +156,16 @@ Hypervector_ClassifySet trainAndRetrain(Hypervector_Basis * basis, uint8_t ** im
         
         printf("\rTraining... %d/%d", (int)i, (int)numTrain);
         fflush(stdout);
-    }
+    }*/
+    printf("Training... "); fflush(stdout);
+    parallelTrain(basis, &trainSet, &classifySet, labels, images, false, numTrain);
+    printf("done\n");
 
-    Hypervector_ClassifySet classifySet;
     hypervector_newClassifySet(&classifySet, &trainSet);
 
-    int r; for (r = 0; r < 5; r++) {
-        int nCorrect = 0;
+    int numRetrain = 5;
+    int r; for (r = 0; r < numRetrain; r++) {
+        /*int nCorrect = 0;
 
         size_t i; for (i = 0; i < numTrain; i++) {
             Hypervector_Hypervector vector = hypervector_encode(images[i], basis);
@@ -83,7 +185,12 @@ Hypervector_ClassifySet trainAndRetrain(Hypervector_Basis * basis, uint8_t ** im
             fflush(stdout);
         }
 
-        printf("\nAccuracy %d/%d\n", nCorrect, (int)numTrain);
+        printf("\nAccuracy %d/%d\n", nCorrect, (int)numTrain);*/
+        printf("Retraining %d/%d... ", r+1, numRetrain); fflush(stdout);
+        int nCorrect = parallelTrain(basis, &trainSet, &classifySet, labels,
+                                            images, true, numTrain);
+        printf("done (last iteration %d/%d correct)\n", (int)nCorrect, (int)numTrain);
+
 
         hypervector_deleteClassifySet(&classifySet);
         hypervector_newClassifySet(&classifySet, &trainSet);
