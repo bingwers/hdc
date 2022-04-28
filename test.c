@@ -118,7 +118,7 @@ int main() {
     unsigned char ** trainImages = mnist_loadImages("mnist/train-images.idx3-ubyte",
         &nTrainImages, &width, &height);
     unsigned char ** downscaledTrainImages = mnist_resizeImages(trainImages,
-        nTrainImages, &width, &height, 1);
+        nTrainImages, &width, &height, 2);
 
     unsigned int nTestItems, nTestImages;
     unsigned char * testLabels = mnist_loadLabels("mnist/t10k-labels.idx1-ubyte",
@@ -126,7 +126,7 @@ int main() {
     unsigned char ** testImages = mnist_loadImages("mnist/t10k-images.idx3-ubyte",
         &nTestImages, &width, &height);
     unsigned char ** downscaledTestImages = mnist_resizeImages(testImages,
-        nTestImages, &width, &height, 1);
+        nTestImages, &width, &height, 2);
 
     printf("Loaded images\n");
     unsigned int imageSize = width * height;

@@ -7,8 +7,9 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
+#include <math.h>
 
-#define N_LEVELS (2)
+#define N_LEVELS (256)
 #define LEVEL_DOWNSCALE (256 / N_LEVELS)
 
 typedef struct Hypervector_Basis Hypervector_Basis;
@@ -31,11 +32,15 @@ struct Hypervector_TrainSet {
     size_t nLabels;
     size_t length;
     int32_t ** vectors;
+    size_t nTrainSamples;
 };
 
 struct Hypervector_ClassifySet {
     size_t nLabels;
-    Hypervector_Hypervector * classVectors;
+    //Hypervector_Hypervector * classVectors;
+    size_t length;
+    int32_t ** classVectors;
+    double * vectorLengths;
 };
 
 void hypervector_newVector(Hypervector_Hypervector * vector, size_t length) {
@@ -244,6 +249,7 @@ void hypervector_newTrainSet(Hypervector_TrainSet * trainSet, size_t length, siz
     trainSet -> nLabels = nLabels;
     trainSet -> length = length;
     trainSet -> vectors = (int32_t**)malloc(sizeof(int32_t*) * nLabels);
+    trainSet -> nTrainSamples = 0;
 
     size_t i; for (i = 0; i < nLabels; i++) {
         trainSet -> vectors[i] = (int32_t*)malloc(sizeof(int32_t) * length);
@@ -270,6 +276,8 @@ void hypervector_train(Hypervector_TrainSet * trainSet, Hypervector_Hypervector 
         bool elem = (bitArray[i >> 3] >> (i & 0x7)) & 1;
         trainVector[i] += elem ? 1 : -1;
     }
+
+    trainSet -> nTrainSamples++;
 }
 
 void hypervector_newClassifySet(Hypervector_ClassifySet * classifySet,
@@ -279,36 +287,38 @@ void hypervector_newClassifySet(Hypervector_ClassifySet * classifySet,
     size_t length = trainSet -> length;
 
     classifySet -> nLabels = nLabels;
-    classifySet -> classVectors = (Hypervector_Hypervector*)
-        malloc(sizeof(Hypervector_Hypervector) * nLabels);
+    classifySet -> length = length;
+    classifySet -> classVectors = (int32_t**)malloc(sizeof(int32_t*) * nLabels);
+    classifySet -> vectorLengths = (double*)malloc(sizeof(double) * nLabels);
 
     size_t i; for (i = 0; i < nLabels; i++) {
-        Hypervector_Hypervector * vector = &classifySet -> classVectors[i];
-        int32_t * trainVector = trainSet -> vectors[i];
+        double vectorLength = 0.0;
 
-        hypervector_newVector(vector, length);
+        int32_t * classVector = (int32_t*)malloc(sizeof(int32_t) * length);
+        
         size_t j; for (j = 0; j < length; j++) {
-            if (trainVector[j] > 0) {
-                vector -> elems[j >> 3] |= (1 << (j & 0x7));
-            }
-            else {
-                vector -> elems[j >> 3] &= ~(1 << (j & 0x7));
-            }
+            int32_t val = trainSet -> vectors[i][j];
+            classVector[j] = val;
+            vectorLength += val * val;
         }
+
+        classifySet -> classVectors[i] = classVector;
+        classifySet -> vectorLengths[i] = sqrtl(vectorLength);
     }
 }
 
 void hypervector_deleteClassifySet(Hypervector_ClassifySet * classifySet) {
     size_t i; for (i = 0; i < classifySet -> nLabels; i++) {
-        hypervector_deleteVector(&classifySet -> classVectors[i]);
+        free(classifySet -> classVectors[i]);
     }
     free(classifySet -> classVectors);
+    free(classifySet -> vectorLengths);
 }
 
 size_t hypervector_classify(Hypervector_ClassifySet * classifySet,
     Hypervector_Hypervector * vector) {
     
-    size_t bestLabel = (size_t)(-1);
+    /*size_t bestLabel = (size_t)(-1);
     size_t smallestDistance = (size_t)(-1);
 
     size_t length = vector -> length;
@@ -332,6 +342,40 @@ size_t hypervector_classify(Hypervector_ClassifySet * classifySet,
             bestLabel = label;
             smallestDistance = dist;
         }
+    }
+
+    return bestLabel;*/
+
+    size_t bestLabel = (size_t)(-1);
+    double maxSimilarity = __DBL_MIN__;
+
+    size_t length = vector -> length;
+
+    size_t label; for (label = 0; label < classifySet -> nLabels; label++) {
+        int64_t similarity = 0;
+
+        uint8_t * bitArray = vector -> elems;
+        int32_t * classVector = classifySet -> classVectors[label];
+
+        size_t j; for (j = 0; j < length; j++) {
+            bool polarity = (bitArray[j >> 3] >> (j & 0x7)) & 1;
+
+            if (polarity) {
+                similarity += classVector[j];
+            }
+            else {
+                similarity -= classVector[j];
+            }
+        }
+
+        double scaledSimilarity = (double)similarity / classifySet -> vectorLengths[label];
+
+        if (scaledSimilarity > maxSimilarity) {
+            bestLabel = label;
+            maxSimilarity = scaledSimilarity;
+        }
+
+        //printf("    similarity for %d: %d\n", (int)label, (int)similarity);
     }
 
     return bestLabel;
