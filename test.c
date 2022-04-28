@@ -62,14 +62,16 @@ Hypervector_ClassifySet trainAndRetrain(Hypervector_Basis * basis, uint8_t ** im
     Hypervector_ClassifySet classifySet;
     hypervector_newClassifySet(&classifySet, &trainSet);
 
-    int r; for (r = 0; r < 1; r++) {
+    int r; for (r = 0; r < 5; r++) {
         int nCorrect = 0;
 
         size_t i; for (i = 0; i < numTrain; i++) {
             Hypervector_Hypervector vector = hypervector_encode(images[i], basis);
 
-            if (hypervector_classify(&classifySet, &vector) != (size_t)labels[i]) {
+            size_t classification = hypervector_classify(&classifySet, &vector);
+            if (classification != (size_t)labels[i]) {
                 hypervector_train(&trainSet, &vector, labels[i]);
+                hypervector_untrain(&trainSet, &vector, classification);
             }
             else {
                 nCorrect++;

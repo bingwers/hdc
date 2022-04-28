@@ -9,7 +9,7 @@
 #include <string.h>
 #include <math.h>
 
-#define N_LEVELS (256)
+#define N_LEVELS (16)
 #define LEVEL_DOWNSCALE (256 / N_LEVELS)
 
 typedef struct Hypervector_Basis Hypervector_Basis;
@@ -280,6 +280,22 @@ void hypervector_train(Hypervector_TrainSet * trainSet, Hypervector_Hypervector 
     trainSet -> nTrainSamples++;
 }
 
+void hypervector_untrain(Hypervector_TrainSet * trainSet, Hypervector_Hypervector * vector, 
+    size_t label) {
+    
+    size_t length = vector -> length;
+
+    uint8_t * bitArray = vector -> elems;
+    int32_t * trainVector = trainSet -> vectors[label];
+
+    size_t i; for (i = 0; i < length; i++) {
+        bool elem = (bitArray[i >> 3] >> (i & 0x7)) & 1;
+        trainVector[i] += elem ? -1 : +1;
+    }
+
+    trainSet -> nTrainSamples++;
+}
+
 void hypervector_newClassifySet(Hypervector_ClassifySet * classifySet,
                                 Hypervector_TrainSet * trainSet) {
     
@@ -299,7 +315,8 @@ void hypervector_newClassifySet(Hypervector_ClassifySet * classifySet,
         size_t j; for (j = 0; j < length; j++) {
             int32_t val = trainSet -> vectors[i][j];
             classVector[j] = val;
-            vectorLength += val * val;
+            double dblVal = (double)val;
+            vectorLength += dblVal * dblVal;
         }
 
         classifySet -> classVectors[i] = classVector;
