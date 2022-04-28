@@ -9,7 +9,7 @@
 #include <string.h>
 #include <math.h>
 
-#define N_LEVELS (16)
+#define N_LEVELS (256)
 #define LEVEL_DOWNSCALE (256 / N_LEVELS)
 
 typedef struct Hypervector_Basis Hypervector_Basis;
@@ -97,7 +97,7 @@ void hypervector_newBasis(Hypervector_Basis * basis, size_t length, size_t n) {
     }
 
     // construct the other level vectors through bit flips
-    size_t flipsPerLevel = length / (2 * (N_LEVELS - 1));
+    size_t flipsPerLevel = length / (1 * (N_LEVELS - 1));
     bool * flippedBits = malloc(sizeof(bool) * length);
     memset(flippedBits, 0, sizeof(bool) * length);
     Hypervector_Hypervector * prevVector = basis -> levelVectors;
@@ -297,7 +297,7 @@ void hypervector_untrain(Hypervector_TrainSet * trainSet, Hypervector_Hypervecto
 }
 
 void hypervector_newClassifySet(Hypervector_ClassifySet * classifySet,
-                                Hypervector_TrainSet * trainSet) {
+    Hypervector_TrainSet * trainSet, int quantize) {
     
     size_t nLabels = trainSet -> nLabels;
     size_t length = trainSet -> length;
@@ -310,10 +310,35 @@ void hypervector_newClassifySet(Hypervector_ClassifySet * classifySet,
     size_t i; for (i = 0; i < nLabels; i++) {
         double vectorLength = 0.0;
 
-        int32_t * classVector = (int32_t*)malloc(sizeof(int32_t) * length);
-        
-        size_t j; for (j = 0; j < length; j++) {
+        int32_t maxVal = 0;
+        size_t j;
+        for (j = 0; j < length; j++) {
             int32_t val = trainSet -> vectors[i][j];
+            
+            if (abs(val) > maxVal) {
+                maxVal = abs(val);
+            }
+        }
+
+        double divisor;
+        if (quantize != 0) {
+            divisor = (double)(maxVal + 1)/(double)quantize;
+        }
+
+        int32_t * classVector = (int32_t*)malloc(sizeof(int32_t) * length);
+
+        for (j = 0; j < length; j++) {
+            int32_t val = trainSet -> vectors[i][j];
+
+            if (quantize != 0) {
+                if (val > 0) {
+                    val = floor((double)val / divisor) + 1;
+                }
+                else {
+                    val = -floor((double)(-val) / divisor) - 1;
+                }
+            }
+
             classVector[j] = val;
             double dblVal = (double)val;
             vectorLength += dblVal * dblVal;
