@@ -20,11 +20,12 @@ Hypervector_ClassifySet train(Hypervector_Basis * basis, uint8_t ** images,
     }
 
     size_t i; for (i = 0; i < numTrain; i++) {
-        Hypervector_Hypervector vector = hypervector_encode(images[i], basis);
+        int16_t * encodedVector = hypervector_encode(images[i], basis);
 
-        hypervector_train(&trainSet, &vector, labels[i]);
+        hypervector_train(&trainSet, encodedVector, labels[i]);
 
-        hypervector_deleteVector(&vector);
+        //hypervector_deleteVector(&vector);
+        free(encodedVector);
         
         printf("\rTraining... %d/%d", (int)i, (int)numTrain);
         fflush(stdout);
@@ -49,11 +50,14 @@ Hypervector_ClassifySet trainAndRetrain(Hypervector_Basis * basis, uint8_t ** im
     }
 
     size_t i; for (i = 0; i < numTrain; i++) {
-        Hypervector_Hypervector vector = hypervector_encode(images[i], basis);
+        //Hypervector_Hypervector vector = hypervector_encode(images[i], basis);
+        int16_t * encodedVector = hypervector_encode(images[i], basis);
 
-        hypervector_train(&trainSet, &vector, labels[i]);
+        //hypervector_train(&trainSet, &vector, labels[i]);
+        hypervector_train(&trainSet, encodedVector, labels[i]);
 
-        hypervector_deleteVector(&vector);
+        //hypervector_deleteVector(&vector);
+        free(encodedVector);
         
         printf("\rTraining... %d/%d", (int)i, (int)numTrain);
         fflush(stdout);
@@ -66,16 +70,20 @@ Hypervector_ClassifySet trainAndRetrain(Hypervector_Basis * basis, uint8_t ** im
         int nCorrect = 0;
 
         size_t i; for (i = 0; i < numTrain; i++) {
-            Hypervector_Hypervector vector = hypervector_encode(images[i], basis);
+            //Hypervector_Hypervector vector = hypervector_encode(images[i], basis);
+            int16_t * encodedVector = hypervector_encode(images[i], basis);
 
-            if (hypervector_classify(&classifySet, &vector) != (size_t)labels[i]) {
-                hypervector_train(&trainSet, &vector, labels[i]);
+            size_t classification = hypervector_classify(&classifySet, encodedVector);
+            if (classification != (size_t)labels[i]) {
+                hypervector_train(&trainSet, encodedVector, labels[i]);
+                hypervector_untrain(&trainSet, encodedVector, classification);
             }
             else {
                 nCorrect++;
             }
 
-            hypervector_deleteVector(&vector);
+            //hypervector_deleteVector(vector);
+            free(encodedVector);
             
             printf("\rRetraining [%d]... %d/%d", r, (int)i, (int)numTrain);
             fflush(stdout);
@@ -96,16 +104,18 @@ void test(Hypervector_ClassifySet * classifySet, Hypervector_Basis * basis,
 
     int nCorrect = 0;    
     size_t i; for (i = 0; i < 10000; i++) {
-        Hypervector_Hypervector vector = hypervector_encode(images[i], basis);
+        //Hypervector_Hypervector vector = hypervector_encode(images[i], basis);
+        int16_t * encodedVector = hypervector_encode(images[i], basis);
 
-        size_t label = hypervector_classify(classifySet, &vector);
+        size_t label = hypervector_classify(classifySet, encodedVector);
         printf("Test %d:  %d %d\n", (int)i, (int)labels[i], (int)label);
 
         if ((int)labels[i] == (int)label) {
             nCorrect++;
         }
 
-        hypervector_deleteVector(&vector);
+        //hypervector_deleteVector(&vector);
+        free(encodedVector);
     }
 
     printf("\nNumber Correct: %d\n", nCorrect);
