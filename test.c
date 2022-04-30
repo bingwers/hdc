@@ -13,11 +13,11 @@
 #define N_TRAIN_SAMPLES (60000)
 #define N_TEST_SAMPLES (10000)
 
-#define HYPERVECTOR_SIZE (10000)
-#define INPUT_DOWNSCALE_FACTOR (2) // 1,2, or 3 practical
+#define HYPERVECTOR_SIZE (20000)
+#define INPUT_DOWNSCALE_FACTOR (1) // 1,2, or 3 practical
 #define INPUT_QUANTIZATION_LEVELS (2) // max = 256
 #define CLASS_VECTOR_QUANTIZATION_LEVELS (2) // should be multiple of 2
-#define RETRAIN_ITERATIONS (3)
+#define RETRAIN_ITERATIONS (7)
 
 
 struct TrainJob {

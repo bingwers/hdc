@@ -304,6 +304,23 @@ void hypervector_newClassifySet(Hypervector_ClassifySet * classifySet,
     }
 }
 
+void hypervector_blankClassifySet(Hypervector_ClassifySet * classifySet,
+    size_t nLabels, size_t length) {
+
+    classifySet -> nLabels = nLabels;
+    classifySet -> length = length;
+    classifySet -> classVectors = (int32_t**)malloc(sizeof(int32_t*) * nLabels);
+    classifySet -> vectorLengths = (double*)malloc(sizeof(double) * nLabels);
+
+    size_t i; for (i = 0; i < nLabels; i++) {
+        int32_t * classVector = (int32_t*)malloc(sizeof(int32_t) * length);
+        memset(classVector, 0, sizeof(int32_t) * length);
+
+        classifySet -> classVectors[i] = classVector;
+        classifySet -> vectorLengths[i] = 1.0;
+    }
+}
+
 void hypervector_deleteClassifySet(Hypervector_ClassifySet * classifySet) {
     size_t i; for (i = 0; i < classifySet -> nLabels; i++) {
         free(classifySet -> classVectors[i]);

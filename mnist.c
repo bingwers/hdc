@@ -12,7 +12,7 @@ unsigned int flipByteOrder32(unsigned int val) {
             + ((val & 0xFF000000) >> 24);
 }
 
-unsigned char * mnist_loadLabels(char * filePath, unsigned int * nItems) {
+unsigned char * mnist_loadLabels(const char * filePath, unsigned int * nItems) {
     FILE * fp = fopen(filePath, "r");
     if (fp == NULL) {
         return NULL;
@@ -42,6 +42,20 @@ unsigned char * mnist_loadLabels(char * filePath, unsigned int * nItems) {
     return labels;
 }
 
+void mnist_saveLabels(const char * filePath, unsigned char * labels, unsigned int nLabels) {
+    FILE * fp = fopen(filePath, "wb");
+
+    unsigned int magicNumber = 0x08010000; //  might be wrong
+    unsigned int nLabels_flipped = flipByteOrder32(nLabels);
+
+    fwrite(&magicNumber, 4, 1, fp);
+    fwrite(&nLabels_flipped, 4, 1, fp);
+
+    fwrite(labels, 1, nLabels, fp);
+
+    fclose(fp);
+}
+
 void mnist_deleteImages(unsigned char ** images, unsigned int n) {
     unsigned int i;
     for (i = 0; i < n; ++i) {
@@ -51,7 +65,7 @@ void mnist_deleteImages(unsigned char ** images, unsigned int n) {
     free(images);
 }
 
-unsigned char ** mnist_loadImages(char * filePath, unsigned int * nItems,
+unsigned char ** mnist_loadImages(const char * filePath, unsigned int * nItems,
     unsigned int * width, unsigned int * height) {
 
     FILE * fp = fopen(filePath, "r");
@@ -92,6 +106,31 @@ unsigned char ** mnist_loadImages(char * filePath, unsigned int * nItems,
     fclose(fp);
 
     return images;
+}
+
+void mnist_saveImages(const char * filePath, unsigned char ** images, 
+    unsigned int nImages, unsigned int width, unsigned int height) {
+
+    FILE * fp = fopen(filePath, "wb");
+
+    unsigned int magicNumber = 0x08030000; // might be wrong
+    unsigned int nImages_flipped = flipByteOrder32(nImages);
+    unsigned int width_flipped = flipByteOrder32(width);
+    unsigned int height_flipped = flipByteOrder32(height);
+
+    unsigned int imageSize = width * height;
+
+    fwrite(&magicNumber, 4, 1, fp);
+    fwrite(&nImages_flipped, 4, 1, fp);
+    fwrite(&width_flipped, 4, 1, fp);
+    fwrite(&height_flipped, 4, 1, fp);
+
+    int i;
+    for (i = 0; i < nImages; i++) {
+        fwrite(images[i], 1, imageSize, fp);
+    }
+
+    fclose(fp);
 }
 
 unsigned char ** mnist_resizeImages(unsigned char ** images, unsigned int nImages,
