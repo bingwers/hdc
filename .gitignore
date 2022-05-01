@@ -6,4 +6,3 @@ simResults/**
 __pycache__/**
 demo**
 models/**
-mnist/**
