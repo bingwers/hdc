@@ -13,10 +13,13 @@ class Model:
             hypervectorSize is None and
             inputQuant is None and
             classVectorQuant is None and
-            downsize is None
+            imageSize is None
         ):
             return
 
+        assert(imageSize >= 9 and imageSize <= 28)
+
+        self.imageSize = imageSize
         self.lib.Model_new.restype = ctypes.c_void_p
         self.model = self.lib.Model_new(
             ctypes.c_int(hypervectorSize),
@@ -25,7 +28,12 @@ class Model:
             ctypes.c_int(imageSize)
         )
     
-    def train(self, labelsFn, imagesFn, trainSamples, retrainIterations):
+    def train(self, trainSamples=60000, retrainIterations=3, labelsFn=None, imagesFn=None):
+        if labelsFn is None:
+            labelsFn = f"mnist/train-labels-{self.imageSize}x{self.imageSize}-60000.idx1-ubyte"
+        if imagesFn is None:
+            imagesFn = f"mnist/train-images-{self.imageSize}x{self.imageSize}-60000.idx3-ubyte"
+
         self.lib.Model_train(
             self.model,
             ctypes.c_char_p(labelsFn.encode('utf-8')),
@@ -34,7 +42,12 @@ class Model:
             ctypes.c_int(retrainIterations)
         )
 
-    def trainOneIteration(self, labelsFn, imagesFn, trainSamples):
+    def trainOneIteration(self, trainSamples=60000, labelsFn=None, imagesFn=None):
+        if labelsFn is None:
+            labelsFn = f"mnist/train-labels-{self.imageSize}x{self.imageSize}-60000.idx1-ubyte"
+        if imagesFn is None:
+            imagesFn = f"mnist/train-images-{self.imageSize}x{self.imageSize}-60000.idx3-ubyte"
+
         self.lib.Model_trainOneIteration(
             self.model,
             ctypes.c_char_p(labelsFn.encode('utf-8')),
@@ -43,7 +56,12 @@ class Model:
         )
 
 
-    def test(self, labelsFn, imagesFn, testSamples):
+    def test(self, testSamples=10000, labelsFn=None, imagesFn=None):
+        if labelsFn is None:
+            labelsFn = f"mnist/test-labels-{self.imageSize}x{self.imageSize}-10000.idx1-ubyte"
+        if imagesFn is None:
+            imagesFn = f"mnist/test-images-{self.imageSize}x{self.imageSize}-10000.idx3-ubyte"
+
         self.lib.Model_test.restype = ctypes.c_int
         nCorrect = self.lib.Model_test(
             self.model,
@@ -73,6 +91,9 @@ class Model:
             ctypes.c_char_p(modelFn.encode('utf-8')),
         )
 
+        Model.lib.Model_getImageSize(model.model)
+        model.imageSize = int(Model.lib.Model_getImageSize(model.model))
+
         return model
 
     def save(self, modelFn):
@@ -83,13 +104,3 @@ class Model:
 
     def __del__(self):
         self.lib.Model_delete(self.model)
-
-#model.train("mnist/train-labels.idx1-ubyte", "mnist/train-images.idx3-ubyte", 60000, 0)
-#model.save("models/test5.model")
-#model.train("mnist/train-labels-28x28-300000-skew.idx1-ubyte", "mnist/train-images-28x28-300000-skew.idx3-ubyte", 300000, 8)
-#model.save("models/test7.model")
-#nCorrect = model.test("mnist/t10k-labels.idx1-ubyte", "mnist/t10k-images.idx3-ubyte", 10000)
-
-#model = Model.load("models/test4.model")
-#nCorrect = model.test("mnist/t10k-labels.idx1-ubyte", "mnist/t10k-images.idx3-ubyte", 10000)
-#print(nCorrect)

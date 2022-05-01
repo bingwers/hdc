@@ -355,6 +355,12 @@ Model * Model_new(int hypervectorSize, int inputQuant, int classVectorQuant,
     return model;
 }
 
+int Model_getImageSize(Model * model) {
+    int modelSizeOneDimension = (int)round(sqrt((double)model -> imageSize));
+
+    return modelSizeOneDimension;
+}
+
 void Model_train(Model * model, const char * labelsFn, const char * imagesFn,
     int trainSamples, int retrainIterations) {
 
