@@ -135,17 +135,17 @@ void trainAndRetrain(Hypervector_Basis * basis,
     size_t i;
 
     // Training
-    printf("Training... "); fflush(stdout);
+    //printf("Training... "); fflush(stdout);
     parallelTrain(basis, &trainSet, classifySet, labels, images, false, numTrain);
-    printf("done\n");
+    //printf("done\n");
     hypervector_newClassifySet(classifySet, &trainSet, quantization);
 
     // Retraining
     int r; for (r = 0; r < numRetrain; r++) {
-        printf("Retraining %d/%d... ", r+1, numRetrain); fflush(stdout);
+        //printf("Retraining %d/%d... ", r+1, numRetrain); fflush(stdout);
         int nCorrect = parallelTrain(basis, &trainSet, classifySet, labels,
                                             images, true, numTrain);
-        printf("done (last iteration %d/%d correct)\n", (int)nCorrect, (int)numTrain);
+        //printf("done (last iteration %d/%d correct)\n", (int)nCorrect, (int)numTrain);
 
 
         hypervector_deleteClassifySet(classifySet);
