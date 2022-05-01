@@ -4,9 +4,8 @@
 import ctypes
 import pathlib
 
-
 class Model:
-    lib = ctypes.CDLL(pathlib.Path().absolute() / "libmodel.so")
+    lib = ctypes.CDLL(pathlib.Path().absolute() / "bin" / "libmodel.so")
 
     def __init__(self, hypervectorSize, inputQuant, classVectorQuant, imageSize):
         if (

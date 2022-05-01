@@ -3,8 +3,9 @@
 #include <stdint.h>
 #include <math.h>
 #include <stdlib.h>
+#include <stdio.h>
 
-#include "mnist.c"
+#include "mnist.h"
 
 uint8_t imageManip_sample(uint8_t * image, int size, float x, float y) {
     if (fabsf(x) > 1.0 || fabs(y) > 1.0) {

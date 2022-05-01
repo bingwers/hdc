@@ -2,8 +2,11 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
-#include "mnist.c"
-#include "hypervector.c"
+#include <stdbool.h>
+#include <math.h>
+#include "model.h"
+#include "mnist.h"
+#include "hypervector.h"
 #include "pthread.h"
 
 #define N_LABELS (10)
@@ -213,26 +216,6 @@ int test(Hypervector_ClassifySet * classifySet, Hypervector_Basis * basis,
     //printf("done\nNumber Correct: %d\n", nCorrect);
     return nCorrect;
 }
-
-typedef struct ImageData ImageData;
-typedef struct Model Model;
-
-struct ImageData {
-    unsigned int nImages;
-    unsigned int width, height;
-    uint8_t * labels;
-    uint8_t ** images;
-};
-
-struct Model {
-    Hypervector_Basis basis;
-    Hypervector_ClassifySet classifySet;
-    size_t downsize;
-    size_t imageSize;
-    size_t classVecQuant;
-    Hypervector_TrainSet tmpTrainSet;
-    bool tmpTrainSetValid;
-};
 
 void Model_save(Model * model, const char * modelFn) {
     FILE * fp = fopen(modelFn, "wb");

@@ -1,9 +1,7 @@
 
-#ifndef MNIST_C
-#define MNIST_C
-
 #include <stdio.h>
 #include <stdlib.h>
+#include "mnist.h"
 
 unsigned int flipByteOrder32(unsigned int val) {
     return ((val & 0xFF) << 24)
@@ -171,11 +169,3 @@ unsigned char ** mnist_resizeImages(unsigned char ** images, unsigned int nImage
 
     return newImages;
 }
-
-/*unsigned char ** mnist_expandImages(unsigned char ** images, unsigned char * labels,
-    unsigned int width, unsigned int height, int nImages, unsigned char ** retLabels) {
-    
-    unsigned char ** newImages
-    }*/
-
-#endif // MNIST_C

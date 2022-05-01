@@ -6,3 +6,5 @@ simResults/**
 __pycache__/**
 demo**
 models/**
+obj/**
+bin/**
