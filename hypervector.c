@@ -148,7 +148,7 @@ uint64_t encodeBitConversionTable[16] = {
     0x1000100000000, 0x1000100000001, 0x1000100010000, 0x1000100010001
 };
 
-int16_t * hypervector_encode(uint8_t * input, Hypervector_Basis * basis) {
+Hypervector_Hypervector hypervector_encode(uint8_t * input, Hypervector_Basis * basis) {
     
     size_t n = basis -> n;
     size_t halfN = n / 2;
@@ -226,9 +226,9 @@ int16_t * hypervector_encode(uint8_t * input, Hypervector_Basis * basis) {
         }
     }
 
-    hypervector_deleteVector(&dotResult);
+    //hypervector_deleteVector(&dotResult);
 
-    /*Hypervector_Hypervector vector = dotResult; // move operation
+    Hypervector_Hypervector vector = dotResult; // move operation
     //hypervector_newVector(&vector, length);
 
     size_t j; for (j = 0; j < length; j++) {
@@ -242,14 +242,7 @@ int16_t * hypervector_encode(uint8_t * input, Hypervector_Basis * basis) {
 
     free(accBuf);
 
-    return vector;*/
-
-    int16_t * accBuf_as_i16 = accBuf;
-    size_t j; for (j = 0; j < length; j++) {
-        accBuf_as_i16[j] = (int16_t)accBuf[j] * 2 - n;
-    }
-
-    return accBuf_as_i16;
+    return vector;
 }
 
 void hypervector_newTrainSet(Hypervector_TrainSet * trainSet, size_t length, size_t nLabels) {
@@ -271,35 +264,17 @@ void hypervector_deleteTrainSet(Hypervector_TrainSet * trainSet) {
     free(trainSet -> vectors);
 }
 
-void hypervector_train(Hypervector_TrainSet * trainSet, int16_t * vector, 
+void hypervector_train(Hypervector_TrainSet * trainSet, Hypervector_Hypervector * vector, 
     size_t label) {
     
-    size_t length = trainSet -> length;
+    size_t length = vector -> length;
 
-    /*uint8_t * bitArray = vector -> elems;
+    uint8_t * bitArray = vector -> elems;
     int32_t * trainVector = trainSet -> vectors[label];
 
     size_t i; for (i = 0; i < length; i++) {
         bool elem = (bitArray[i >> 3] >> (i & 0x7)) & 1;
         trainVector[i] += elem ? 1 : -1;
-    }*/
-
-    int32_t * trainVector = trainSet -> vectors[label];
-    size_t i; for (i = 0; i < length; i++) {
-        trainVector[i] += (int32_t)vector[i];
-    }
-
-    trainSet -> nTrainSamples++;
-}
-
-void hypervector_untrain(Hypervector_TrainSet * trainSet, int16_t * vector, 
-    size_t label) {
-    
-    size_t length = trainSet -> length;
-
-    int32_t * trainVector = trainSet -> vectors[label];
-    size_t i; for (i = 0; i < length; i++) {
-        trainVector[i] -= (int32_t)vector[i];
     }
 
     trainSet -> nTrainSamples++;
@@ -324,7 +299,7 @@ void hypervector_newClassifySet(Hypervector_ClassifySet * classifySet,
         size_t j; for (j = 0; j < length; j++) {
             int32_t val = trainSet -> vectors[i][j];
             classVector[j] = val;
-            vectorLength += (double)val * (double)val;
+            vectorLength += val * val;
         }
 
         classifySet -> classVectors[i] = classVector;
@@ -341,8 +316,7 @@ void hypervector_deleteClassifySet(Hypervector_ClassifySet * classifySet) {
 }
 
 size_t hypervector_classify(Hypervector_ClassifySet * classifySet,
-    int16_t * vector) {
-    //Hypervector_Hypervector * vector) {
+    Hypervector_Hypervector * vector) {
     
     /*size_t bestLabel = (size_t)(-1);
     size_t smallestDistance = (size_t)(-1);
@@ -375,24 +349,23 @@ size_t hypervector_classify(Hypervector_ClassifySet * classifySet,
     size_t bestLabel = (size_t)(-1);
     double maxSimilarity = __DBL_MIN__;
 
-    size_t length = classifySet -> length;
+    size_t length = vector -> length;
 
     size_t label; for (label = 0; label < classifySet -> nLabels; label++) {
         int64_t similarity = 0;
 
-        //uint8_t * bitArray = vector -> elems;
+        uint8_t * bitArray = vector -> elems;
         int32_t * classVector = classifySet -> classVectors[label];
 
         size_t j; for (j = 0; j < length; j++) {
-            similarity += (int32_t)(vector[j]) * classVector[j];
-            /*bool polarity = (bitArray[j >> 3] >> (j & 0x7)) & 1;
+            bool polarity = (bitArray[j >> 3] >> (j & 0x7)) & 1;
 
             if (polarity) {
                 similarity += classVector[j];
             }
             else {
                 similarity -= classVector[j];
-            }*/
+            }
         }
 
         double scaledSimilarity = (double)similarity / classifySet -> vectorLengths[label];
