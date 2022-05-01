@@ -8,9 +8,10 @@
 #include <stdbool.h>
 #include <string.h>
 #include <math.h>
+#include <float.h>
 
-#define N_LEVELS (256)
-#define LEVEL_DOWNSCALE (256 / N_LEVELS)
+//#define N_LEVELS (2)
+//#define LEVEL_DOWNSCALE (256 / N_LEVELS)
 
 typedef struct Hypervector_Basis Hypervector_Basis;
 typedef struct Hypervector_Hypervector Hypervector_Hypervector;
@@ -23,7 +24,8 @@ struct Hypervector_Hypervector {
 };
 
 struct Hypervector_Basis {
-    size_t n;
+    size_t nInputs;
+    size_t nLevels;
     Hypervector_Hypervector * basisVectors;
     Hypervector_Hypervector * levelVectors;
 };
@@ -37,7 +39,6 @@ struct Hypervector_TrainSet {
 
 struct Hypervector_ClassifySet {
     size_t nLabels;
-    //Hypervector_Hypervector * classVectors;
     size_t length;
     int32_t ** classVectors;
     double * vectorLengths;
@@ -66,15 +67,18 @@ void hypervector_deleteVector(Hypervector_Hypervector * vector) {
     free(vector -> elems);
 }
 
-void hypervector_newBasis(Hypervector_Basis * basis, size_t length, size_t n) {
+void hypervector_newBasis(Hypervector_Basis * basis, size_t length,
+    size_t nInputs, size_t nLevels) {
+
     size_t lengthBytes = length / 8 + 1;
 
-    basis -> n = n;
+    basis -> nInputs = nInputs;
+    basis -> nLevels = nLevels;
     basis -> basisVectors = (Hypervector_Hypervector*)
-        malloc(sizeof(Hypervector_Hypervector) * n);
+        malloc(sizeof(Hypervector_Hypervector) * nInputs);
 
     Hypervector_Hypervector * vector = basis -> basisVectors;
-    size_t i; for (i = 0; i < n; i++) {
+    size_t i; for (i = 0; i < nInputs; i++) {
         hypervector_newVector(vector, length);
 
         size_t j; for (j = 0; j < lengthBytes; j++) {
@@ -86,7 +90,7 @@ void hypervector_newBasis(Hypervector_Basis * basis, size_t length, size_t n) {
 
     // set the first level vector
     basis -> levelVectors = (Hypervector_Hypervector*)
-        malloc(sizeof(Hypervector_Hypervector) * N_LEVELS);
+        malloc(sizeof(Hypervector_Hypervector) * nLevels);
 
     {
         hypervector_newVector(&basis -> levelVectors[0], length);
@@ -97,12 +101,12 @@ void hypervector_newBasis(Hypervector_Basis * basis, size_t length, size_t n) {
     }
 
     // construct the other level vectors through bit flips
-    size_t flipsPerLevel = length / (2 * (N_LEVELS - 1));
+    size_t flipsPerLevel = length / (1 * (nLevels - 1));
     bool * flippedBits = malloc(sizeof(bool) * length);
     memset(flippedBits, 0, sizeof(bool) * length);
     Hypervector_Hypervector * prevVector = basis -> levelVectors;
     vector = prevVector + 1;
-    for (i = 1; i < N_LEVELS; i++) {
+    for (i = 1; i < nLevels; i++) {
         hypervector_newVector(vector, length);
 
         memcpy(vector -> elems, prevVector -> elems, lengthBytes);
@@ -131,11 +135,11 @@ void hypervector_newBasis(Hypervector_Basis * basis, size_t length, size_t n) {
 }
 
 void hypervector_deleteBasis(Hypervector_Basis * basis) {
-    size_t i; for (i = 0; i < basis -> n; i++) {
+    size_t i; for (i = 0; i < basis -> nInputs; i++) {
         hypervector_deleteVector(&basis -> basisVectors[i]);
     }
     free(basis -> basisVectors);
-    for (i = 0; i < N_LEVELS; i++) {
+    for (i = 0; i < basis -> nLevels; i++) {
         hypervector_deleteVector(&basis -> levelVectors[i]);
     }
     free(basis -> levelVectors);
@@ -150,8 +154,8 @@ uint64_t encodeBitConversionTable[16] = {
 
 Hypervector_Hypervector hypervector_encode(uint8_t * input, Hypervector_Basis * basis) {
     
-    size_t n = basis -> n;
-    size_t halfN = n / 2;
+    size_t nInputs = basis -> nInputs;
+    size_t halfN = nInputs / 2;
     size_t length = basis -> basisVectors[0].length;
     size_t lengthBytes = (length / 8) + 1;
 
@@ -161,60 +165,14 @@ Hypervector_Hypervector hypervector_encode(uint8_t * input, Hypervector_Basis * 
 
     Hypervector_Hypervector dotResult; hypervector_newVector(&dotResult, length);
 
-    size_t i; for (i = 0; i < n; i++) {
-        Hypervector_Hypervector * levelVector = &basis -> levelVectors[input[i] / LEVEL_DOWNSCALE];
+    uint8_t levelDownscale = (256 / basis -> nLevels);
+    size_t i; for (i = 0; i < nInputs; i++) {
+        Hypervector_Hypervector * levelVector = &basis -> levelVectors[input[i] / levelDownscale];
         Hypervector_Hypervector * basisVector = &basis -> basisVectors[i];
         
         hypervector_xorVector(&dotResult, levelVector, basisVector);
 
         uint8_t * bitArray = dotResult.elems;
-        //memset(bitArray, 0, lengthBytes);
-
-        // 28s
-        /*size_t j; for (j = 0; j < length; j++) {
-            uint16_t elem = (bitArray[j >> 3] >> (j & 0x7)) & 1;
-
-            // optimization note: before this was a bipolar add for simplicity
-            // so it would do accBuf[j] += elem ? 1 : -1
-            // I thought it would compile into a comv, but appearently even on
-            // -O4 gcc prefers to make it a branch; unfortunately by design
-            // the hypervectors have an equal distribution of 1s and 0s so this
-            // prdocued a branch that was the worst case scenario for the branch
-            // predictor and it KILLED performance!!!! (112s vs 28s)
-            accBuf[j] += elem;
-        }*/
-
-        // 19.7s
-        /*size_t j; for (j = 0; j < lengthBytes; j++) {
-            uint8_t val = bitArray[j];
-            accBuf[8*j + 0] += val & 1;
-            accBuf[8*j + 1] += (val >> 1) & 1;
-            accBuf[8*j + 2] += (val >> 2) & 1;
-            accBuf[8*j + 3] += (val >> 3) & 1;
-            accBuf[8*j + 4] += (val >> 4) & 1;
-            accBuf[8*j + 5] += (val >> 5) & 1;
-            accBuf[8*j + 6] += (val >> 6) & 1;
-            accBuf[8*j + 7] += (val >> 7) & 1;
-        }*/
-
-        // 8.5s
-        /*size_t j; for (j = 0; j < lengthBytes; j++) {
-            uint8_t val = bitArray[j];
-
-            uint64_t low = (val & 1)
-                            + ((uint64_t)(val & 2) <<  15)
-                            + ((uint64_t)(val & 4) <<  30)
-                            + ((uint64_t)(val & 8) <<  45);
-            uint64_t hi  = ((uint64_t)(val & 16) >> 4)
-                            + ((uint64_t)(val & 32) <<  11)
-                            + ((uint64_t)(val & 64) <<  26)
-                            + ((uint64_t)(val & 128) <<  41);
-
-            accBuf_as_u64[2 * j] += low;
-            accBuf_as_u64[2 * j + 1] += hi;
-        }*/
-
-        // 7.8s
         size_t j; for (j = 0; j < lengthBytes; j++) {
             uint8_t val = bitArray[j];
 
@@ -226,10 +184,7 @@ Hypervector_Hypervector hypervector_encode(uint8_t * input, Hypervector_Basis * 
         }
     }
 
-    //hypervector_deleteVector(&dotResult);
-
-    Hypervector_Hypervector vector = dotResult; // move operation
-    //hypervector_newVector(&vector, length);
+    Hypervector_Hypervector vector = dotResult; // move operation (don't delete dotResult)
 
     size_t j; for (j = 0; j < length; j++) {
         if (accBuf[j] > halfN) {
@@ -280,8 +235,24 @@ void hypervector_train(Hypervector_TrainSet * trainSet, Hypervector_Hypervector 
     trainSet -> nTrainSamples++;
 }
 
+void hypervector_untrain(Hypervector_TrainSet * trainSet, Hypervector_Hypervector * vector, 
+    size_t label) {
+    
+    size_t length = vector -> length;
+
+    uint8_t * bitArray = vector -> elems;
+    int32_t * trainVector = trainSet -> vectors[label];
+
+    size_t i; for (i = 0; i < length; i++) {
+        bool elem = (bitArray[i >> 3] >> (i & 0x7)) & 1;
+        trainVector[i] += elem ? -1 : +1;
+    }
+
+    trainSet -> nTrainSamples++;
+}
+
 void hypervector_newClassifySet(Hypervector_ClassifySet * classifySet,
-                                Hypervector_TrainSet * trainSet) {
+    Hypervector_TrainSet * trainSet, int quantize) {
     
     size_t nLabels = trainSet -> nLabels;
     size_t length = trainSet -> length;
@@ -294,16 +265,59 @@ void hypervector_newClassifySet(Hypervector_ClassifySet * classifySet,
     size_t i; for (i = 0; i < nLabels; i++) {
         double vectorLength = 0.0;
 
-        int32_t * classVector = (int32_t*)malloc(sizeof(int32_t) * length);
-        
-        size_t j; for (j = 0; j < length; j++) {
+        int32_t maxVal = 0;
+        size_t j;
+        for (j = 0; j < length; j++) {
             int32_t val = trainSet -> vectors[i][j];
+            
+            if (abs(val) > maxVal) {
+                maxVal = abs(val);
+            }
+        }
+
+        double divisor;
+        if (quantize != 0) {
+            divisor = (double)(maxVal + 1)/(double)quantize;
+        }
+
+        int32_t * classVector = (int32_t*)malloc(sizeof(int32_t) * length);
+
+        for (j = 0; j < length; j++) {
+            int32_t val = trainSet -> vectors[i][j];
+
+            if (quantize != 0) {
+                if (val > 0) {
+                    val = floor((double)val / divisor) + 1;
+                }
+                else {
+                    val = -floor((double)(-val) / divisor) - 1;
+                }
+            }
+
             classVector[j] = val;
-            vectorLength += val * val;
+            double dblVal = (double)val;
+            vectorLength += dblVal * dblVal;
         }
 
         classifySet -> classVectors[i] = classVector;
         classifySet -> vectorLengths[i] = sqrtl(vectorLength);
+    }
+}
+
+void hypervector_blankClassifySet(Hypervector_ClassifySet * classifySet,
+    size_t nLabels, size_t length) {
+
+    classifySet -> nLabels = nLabels;
+    classifySet -> length = length;
+    classifySet -> classVectors = (int32_t**)malloc(sizeof(int32_t*) * nLabels);
+    classifySet -> vectorLengths = (double*)malloc(sizeof(double) * nLabels);
+
+    size_t i; for (i = 0; i < nLabels; i++) {
+        int32_t * classVector = (int32_t*)malloc(sizeof(int32_t) * length);
+        memset(classVector, 0, sizeof(int32_t) * length);
+
+        classifySet -> classVectors[i] = classVector;
+        classifySet -> vectorLengths[i] = 1.0;
     }
 }
 
@@ -317,37 +331,9 @@ void hypervector_deleteClassifySet(Hypervector_ClassifySet * classifySet) {
 
 size_t hypervector_classify(Hypervector_ClassifySet * classifySet,
     Hypervector_Hypervector * vector) {
-    
-    /*size_t bestLabel = (size_t)(-1);
-    size_t smallestDistance = (size_t)(-1);
-
-    size_t length = vector -> length;
-
-    size_t label; for (label = 0; label < classifySet -> nLabels; label++) {
-        size_t dist = 0;
-
-        uint8_t * bitArray1 = vector -> elems;
-        uint8_t * bitArray2 = classifySet -> classVectors[label].elems;
-
-        size_t j; for (j = 0; j < length; j++) {
-            uint8_t val1 = (bitArray1[j >> 3] >> (j & 0x7)) & 1;
-            uint8_t val2 = (bitArray2[j >> 3] >> (j & 0x7)) & 1;
-
-            if (val1 ^ val2) {
-                dist++;
-            }
-        }
-
-        if (dist < smallestDistance) {
-            bestLabel = label;
-            smallestDistance = dist;
-        }
-    }
-
-    return bestLabel;*/
 
     size_t bestLabel = (size_t)(-1);
-    double maxSimilarity = __DBL_MIN__;
+    double maxSimilarity = DBL_MIN;
 
     size_t length = vector -> length;
 
@@ -374,8 +360,6 @@ size_t hypervector_classify(Hypervector_ClassifySet * classifySet,
             bestLabel = label;
             maxSimilarity = scaledSimilarity;
         }
-
-        //printf("    similarity for %d: %d\n", (int)label, (int)similarity);
     }
 
     return bestLabel;

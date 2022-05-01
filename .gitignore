@@ -1,2 +1,9 @@
 .vscode/**
 a.out
+simResults/**
+**.o
+**.so
+__pycache__/**
+demo**
+models/**
+mnist/**
