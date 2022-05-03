@@ -2,7 +2,7 @@
 from model import Model, MNIST_Model, ISOLET_Model # the Model class wraps the c simulator
 import pathlib
 
-'''pathlib.Path("models").mkdir(parents=True, exist_ok=True) # ensure output location exists
+pathlib.Path("models").mkdir(parents=True, exist_ok=True) # ensure output location exists
 
 model = MNIST_Model(
     hypervectorSize=10000, # size of hypervectors used
@@ -34,14 +34,13 @@ model.save("models/example1.hvmodel")
 loadedModel = MNIST_Model.load("models/example1.hvmodel")
 nCorrect = loadedModel.test(testSamples=10000)
 print(f"Reloaded Model Test Accuracy: {100 * nCorrect / 10000:.2f}%") # should be the same as before
-'''
 
 # Iterative training: do one training iteration at a time and measure accuracy
 # on the test set after each one; note this model will have different randomly
 # chosen basis vectors so its accuracy might be a bit different
 
 print("\nTraining model with accuracy after each iteration:")
-model2 = MNIST_Model(10000, 2, 2, 14)
+model2 = MNIST_Model(10000, 2, 2, 28)
 for i in range(5):
     model2.trainOneIteration(60000)
 
