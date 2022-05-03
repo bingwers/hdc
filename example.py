@@ -1,5 +1,5 @@
 
-from model import Model, MNIST_Model # the Model class wraps the c simulator
+from model import Model, MNIST_Model, ISOLET_Model # the Model class wraps the c simulator
 import pathlib
 
 '''pathlib.Path("models").mkdir(parents=True, exist_ok=True) # ensure output location exists
@@ -47,3 +47,10 @@ for i in range(5):
 
     nCorrect = model2.test(10000)
     print(f"Accuracy after {i+1} iterations: {100 * nCorrect / 10000:.2f}%")
+
+# Iterative Training on the ISOLET dataset
+model = ISOLET_Model(10000, 64, 2)
+for i in range(10):
+    model.trainOneIteration()
+    nCorrect = model.test()
+    print(f"Accuracy after {i}: {nCorrect/1559*100:.2f}%")

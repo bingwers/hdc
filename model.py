@@ -139,4 +139,40 @@ class MNIST_Model(Model):
     def load(modelFn):
         return Model.load(modelFn, MNIST_Model(None, None, None, None))
         
+class ISOLET_Model(Model):
+
+    def __init__(self, hypervectorSize, inputQuant, classVectorQuant):
+        if (
+            hypervectorSize is None and
+            inputQuant is None and
+            classVectorQuant is None
+        ):
+            return
+
+        Model.__init__(self, hypervectorSize, classVectorQuant,
+            inputQuant, 617, 26)
+
+    def train(self, trainSamples=6238, retrainIterations=3):
+        assert(trainSamples <= 6238)
+
+        labelsFn = "isolet/train-labels.idx1-ubyte"
+        featuresFn = "isolet/train-features.idx3-ubyte"
+        Model.train(self, trainSamples, retrainIterations, labelsFn, featuresFn)
     
+    def trainOneIteration(self, trainSamples=6238):
+        assert(trainSamples <= 6238)
+
+        labelsFn = "isolet/train-labels.idx1-ubyte"
+        featuresFn = "isolet/train-features.idx3-ubyte"
+        Model.trainOneIteration(self, trainSamples, labelsFn, featuresFn)
+
+    def test(self, testSamples=1559):
+        assert(testSamples <= 1559)
+
+        labelsFn = "isolet/test-labels.idx1-ubyte"
+        featuresFn = "isolet/test-features.idx3-ubyte"
+        return Model.test(self, testSamples, labelsFn, featuresFn)
+
+    @staticmethod
+    def load(modelFn):
+        return Model.load(modelFn, ISOLET_Model(None, None, None))
