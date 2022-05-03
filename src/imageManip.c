@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-#include "mnist.h"
+#include "dataset.h"
 
 uint8_t imageManip_sample(uint8_t * image, int size, float x, float y) {
     if (fabsf(x) > 1.0 || fabs(y) > 1.0) {
@@ -175,9 +175,9 @@ float imageManip_floatRand() {
 
 void downscaleImages(int size) {
     unsigned int nImages, nLabels, width, height;
-    uint8_t ** images = mnist_loadImages("mnist/train-images.idx3-ubyte",
+    uint8_t ** images = dataset_loadFeatures("mnist/train-images.idx3-ubyte",
         &nImages, &width, &height);
-    uint8_t * labels = mnist_loadLabels("mnist/train-labels.idx1-ubyte",
+    uint8_t * labels = dataset_loadLabels("mnist/train-labels.idx1-ubyte",
         &nLabels);
 
     uint8_t  ** newImages = malloc(sizeof(uint8_t*) * nImages);
@@ -193,19 +193,19 @@ void downscaleImages(int size) {
     sprintf(imagesFn, "mnist/train-images-%dx%d-60000.idx3-ubyte", size, size);
     sprintf(labelsFn, "mnist/train-labels-%dx%d-60000.idx1-ubyte", size, size);
 
-    mnist_saveImages(imagesFn, newImages, nImages, size, size);
-    mnist_saveLabels(labelsFn, labels, nLabels);
+    dataset_saveFeatures(imagesFn, newImages, nImages, size, size);
+    dataset_saveLabels(labelsFn, labels, nLabels);
 
-    mnist_deleteImages(images, nImages);
-    mnist_deleteImages(newImages, nImages);
+    dataset_deleteFeatures(images, nImages);
+    dataset_deleteFeatures(newImages, nImages);
     free(labels);
 }
 
 void downscaleTestImages(int size) {
     unsigned int nImages, nLabels, width, height;
-    uint8_t ** images = mnist_loadImages("mnist/t10k-images.idx3-ubyte",
+    uint8_t ** images = dataset_loadFeatures("mnist/t10k-images.idx3-ubyte",
         &nImages, &width, &height);
-    uint8_t * labels = mnist_loadLabels("mnist/t10k-labels.idx1-ubyte",
+    uint8_t * labels = dataset_loadLabels("mnist/t10k-labels.idx1-ubyte",
         &nLabels);
 
     uint8_t  ** newImages = malloc(sizeof(uint8_t*) * nImages);
@@ -221,56 +221,20 @@ void downscaleTestImages(int size) {
     sprintf(imagesFn, "mnist/test-images-%dx%d-60000.idx3-ubyte", size, size);
     sprintf(labelsFn, "mnist/test-labels-%dx%d-10000.idx1-ubyte", size, size);
 
-    mnist_saveImages(imagesFn, newImages, nImages, size, size);
-    mnist_saveLabels(labelsFn, labels, nLabels);
+    dataset_saveFeatures(imagesFn, newImages, nImages, size, size);
+    dataset_saveLabels(labelsFn, labels, nLabels);
 
-    mnist_deleteImages(images, nImages);
-    mnist_deleteImages(newImages, nImages);
+    dataset_deleteFeatures(images, nImages);
+    dataset_deleteFeatures(newImages, nImages);
     free(labels);
 }
 
 int main() {
     unsigned int nImages, nLabels, width, height;
-    uint8_t ** images = mnist_loadImages("mnist/train-images.idx3-ubyte",
+    uint8_t ** images = dataset_loadFeatures("mnist/train-images.idx3-ubyte",
         &nImages, &width, &height);
-    uint8_t * labels = mnist_loadLabels("mnist/train-labels.idx1-ubyte",
+    uint8_t * labels = dataset_loadLabels("mnist/train-labels.idx1-ubyte",
         &nLabels);
-
-    /*int repeats = 5;
-
-    uint8_t ** newImages = malloc(sizeof(uint8_t*) * nImages * repeats);
-    uint8_t * newLabels = malloc(nLabels * repeats);
-
-    int i;
-    for (i = 0; i < nImages; i++) {
-        int j; for (j = 0; j < repeats; j++) {
-            uint8_t * newImage = imageManip_skew(images[i], 28,
-                0.85 + imageManip_floatRand() * 0.3, 
-                imageManip_floatRand() * 0.3 - 0.15,
-                imageManip_floatRand() * 0.3 - 0.15,
-                0.85 + imageManip_floatRand() * 0.3,
-                imageManip_floatRand() * 0.3 - 0.15,
-                imageManip_floatRand() * 0.3 - 0.15
-            );
-            newImages[i * repeats + j] = newImage;
-            newLabels[i * repeats + j] = labels[i];
-        }
-
-        printf("\r%d/%d      ", i+1, nImages); fflush(stdout);
-    }
-
-    mnist_saveImages("mnist/train-images-28x28-300000-skew.idx3-ubyte",
-        newImages, nImages * repeats, width, height);
-    mnist_saveLabels("mnist/train-labels-28x28-300000-skew.idx1-ubyte",
-        newLabels, nLabels * repeats);*/
-
-    /*uint8_t  ** newImages = malloc(sizeof(uint8_t*) * nImages);
-    uint8_t * newLabels = malloc(nLabels);
-
-    imageManip_disp(images[83], 28);
-
-    uint8_t * newImage = imageManip_downsize(images[83], 28, 12);
-    imageManip_disp(newImage, 12);*/
 
     for (int i = 27; i >= 9; i--) {
         printf("\nDownscaling train images %d\n", i);

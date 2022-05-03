@@ -5,34 +5,31 @@
 #include <stdbool.h>
 #include <math.h>
 #include "model.h"
-#include "mnist.h"
+#include "dataset.h"
 #include "hypervector.h"
 #include "pthread.h"
-
-#define N_LABELS (10)
-#define N_THREADS (8)
 
 struct TrainJob {
     Hypervector_Basis * basis;
     Hypervector_TrainSet * trainSet;
     Hypervector_ClassifySet * classifySet;
     uint8_t * labels;
-    uint8_t ** images;
+    uint8_t ** features;
     bool retrain;
     pthread_mutex_t * mutex;
-    size_t startImage;
-    size_t endImage;
+    size_t startFeature;
+    size_t endFeature;
     int * nWrong;
 };
 
 struct TestJob {
     Hypervector_ClassifySet * classifySet;
     Hypervector_Basis * basis;
-    uint8_t ** images;
+    uint8_t ** features;
     uint8_t * labels;
     int localNCorrect;
-    size_t imageStart;
-    size_t imageEnd;
+    size_t featureStart;
+    size_t featureEnd;
 };
 
 void * parallelTrainFunc(void * arg) {
@@ -40,15 +37,15 @@ void * parallelTrainFunc(void * arg) {
     Hypervector_TrainSet * trainSet = ((struct TrainJob*)arg) -> trainSet;
     Hypervector_ClassifySet * classifySet = ((struct TrainJob*)arg) -> classifySet;
     uint8_t * labels = ((struct TrainJob*)arg) -> labels;
-    uint8_t ** images = ((struct TrainJob*)arg) -> images;
+    uint8_t ** features = ((struct TrainJob*)arg) -> features;
     bool retrain = ((struct TrainJob*)arg) -> retrain;
     pthread_mutex_t * mutex = ((struct TrainJob*)arg) -> mutex;
-    size_t startImage = ((struct TrainJob*)arg) -> startImage;
-    size_t endImage = ((struct TrainJob*)arg) -> endImage;
+    size_t startFeature = ((struct TrainJob*)arg) -> startFeature;
+    size_t endFeature = ((struct TrainJob*)arg) -> endFeature;
     uint32_t * nWrong = ((struct TrainJob*)arg) -> nWrong;
 
-    size_t i; for (i = startImage; i < endImage; i++) {
-        Hypervector_Hypervector vector = hypervector_encode(images[i], basis);
+    size_t i; for (i = startFeature; i < endFeature; i++) {
+        Hypervector_Hypervector vector = hypervector_encode(features[i], basis);
 
         if (retrain) {
             size_t classification = hypervector_classify(classifySet, &vector);
@@ -77,9 +74,9 @@ int parallelTrain(
     Hypervector_TrainSet * trainSet,
     Hypervector_ClassifySet * classifySet,
     uint8_t * labels,
-    uint8_t ** images,
+    uint8_t ** features,
     bool retrain,
-    size_t nImages
+    size_t nItems
 ) {
     pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -92,17 +89,17 @@ int parallelTrain(
         trainJobs[i].trainSet = trainSet;
         trainJobs[i].classifySet = classifySet;
         trainJobs[i].labels = labels;
-        trainJobs[i].images = images;
+        trainJobs[i].features = features;
         trainJobs[i].retrain = retrain;
         trainJobs[i].mutex = &mutex;
         trainJobs[i].nWrong = &nWrong;
 
-        trainJobs[i].startImage = nImages * i / N_THREADS;
+        trainJobs[i].startFeature = nItems * i / N_THREADS;
         if (i == N_THREADS - 1) {
-            trainJobs[i].endImage = nImages;
+            trainJobs[i].endFeature = nItems;
         }
         else {
-            trainJobs[i].endImage = nImages * (i + 1) / N_THREADS;
+            trainJobs[i].endFeature = nItems * (i + 1) / N_THREADS;
         }
     }
 
@@ -114,29 +111,29 @@ int parallelTrain(
         pthread_join(threads[i], NULL);
     }
 
-    return (nImages - nWrong);
+    return (nItems - nWrong);
 }
 
 void trainAndRetrain(Hypervector_Basis * basis,
-    Hypervector_ClassifySet * classifySet, uint8_t ** images,
-    uint8_t * labels, size_t nImages, size_t imageSize,
+    Hypervector_ClassifySet * classifySet, uint8_t ** features,
+    uint8_t * labels, size_t nItems, size_t featureSize,
     size_t numTrain, int numRetrain, int quantization) {
 
     size_t hypervectorSize = basis -> basisVectors[0].length;
 
     Hypervector_TrainSet trainSet;
-    hypervector_newTrainSet(&trainSet, hypervectorSize, N_LABELS);
+    hypervector_newTrainSet(&trainSet, hypervectorSize, classifySet -> nLabels);
     hypervector_deleteClassifySet(classifySet);
 
-    if (numTrain > nImages) {
-        numTrain = nImages;
+    if (numTrain > nItems) {
+        numTrain = nItems;
     }
 
     size_t i;
 
     // Training
     //printf("Training... "); fflush(stdout);
-    parallelTrain(basis, &trainSet, classifySet, labels, images, false, numTrain);
+    parallelTrain(basis, &trainSet, classifySet, labels, features, false, numTrain);
     //printf("done\n");
     hypervector_newClassifySet(classifySet, &trainSet, quantization);
 
@@ -144,7 +141,7 @@ void trainAndRetrain(Hypervector_Basis * basis,
     int r; for (r = 0; r < numRetrain; r++) {
         //printf("Retraining %d/%d... ", r+1, numRetrain); fflush(stdout);
         int nCorrect = parallelTrain(basis, &trainSet, classifySet, labels,
-                                            images, true, numTrain);
+                                            features, true, numTrain);
         //printf("done (last iteration %d/%d correct)\n", (int)nCorrect, (int)numTrain);
 
 
@@ -160,13 +157,13 @@ void * parallelTestFunc(void * arg) {
 
     Hypervector_ClassifySet * classifySet = testJob -> classifySet;
     Hypervector_Basis * basis = testJob -> basis;
-    uint8_t ** images = testJob -> images;
+    uint8_t ** features = testJob -> features;
     uint8_t * labels = testJob -> labels;
-    size_t imageStart = testJob -> imageStart;
-    size_t imageEnd = testJob -> imageEnd;
+    size_t featureStart = testJob -> featureStart;
+    size_t featureEnd = testJob -> featureEnd;
 
-    size_t i; for (i = imageStart; i < imageEnd; i++) {
-        Hypervector_Hypervector vector = hypervector_encode(images[i], basis);
+    size_t i; for (i = featureStart; i < featureEnd; i++) {
+        Hypervector_Hypervector vector = hypervector_encode(features[i], basis);
 
         size_t label = hypervector_classify(classifySet, &vector);
         if ((int)labels[i] == (int)label) {
@@ -180,11 +177,11 @@ void * parallelTestFunc(void * arg) {
 }
 
 int test(Hypervector_ClassifySet * classifySet, Hypervector_Basis * basis,
-    uint8_t ** images, uint8_t * labels, size_t nImages, int nTestSamples) {
+    uint8_t ** features, uint8_t * labels, size_t nItems, int nTestSamples) {
 
     int nTest = nTestSamples;
-    if (nTest > nImages) {
-        nTest = nImages;
+    if (nTest > nItems) {
+        nTest = nItems;
     }
 
     struct TestJob testJobs[N_THREADS];
@@ -196,10 +193,10 @@ int test(Hypervector_ClassifySet * classifySet, Hypervector_Basis * basis,
     for (i = 0; i < N_THREADS; i++) {
         testJobs[i].classifySet = classifySet;
         testJobs[i].basis = basis;
-        testJobs[i].images = images;
+        testJobs[i].features = features;
         testJobs[i].labels = labels;
-        testJobs[i].imageStart = nTest * i / N_THREADS;
-        testJobs[i].imageEnd = nTest * (i + 1) / N_THREADS;
+        testJobs[i].featureStart = nTest * i / N_THREADS;
+        testJobs[i].featureEnd = nTest * (i + 1) / N_THREADS;
         testJobs[i].localNCorrect = 0;
     }
 
@@ -221,7 +218,7 @@ void Model_save(Model * model, const char * modelFn) {
     FILE * fp = fopen(modelFn, "wb");
 
     fwrite(&model -> downsize, sizeof(size_t), 1, fp);
-    fwrite(&model -> imageSize, sizeof(size_t), 1, fp);
+    fwrite(&model -> featureSize, sizeof(size_t), 1, fp);
     fwrite(&model -> classVecQuant, sizeof(size_t), 1, fp);
 
     fwrite(&model -> basis.nInputs, sizeof(size_t), 1, fp);
@@ -255,7 +252,7 @@ Model * Model_load(const char * modelFn) {
     size_t res;
 
     res = fread(&model -> downsize, sizeof(size_t), 1, fp);
-    res = fread(&model -> imageSize, sizeof(size_t), 1, fp);
+    res = fread(&model -> featureSize, sizeof(size_t), 1, fp);
     res = fread(&model -> classVecQuant, sizeof(size_t), 1, fp);
 
     res = fread(&model -> basis.nInputs, sizeof(size_t), 1, fp);
@@ -299,73 +296,48 @@ Model * Model_load(const char * modelFn) {
     return model;
 }
 
-ImageData * ImageData_load(const char * labelsFn,
-    const char * imagesFn, size_t downscale) {
-
-    ImageData * imageData = (ImageData*)malloc(sizeof(ImageData));
-
-    imageData -> labels = mnist_loadLabels(labelsFn, &imageData -> nImages);
-    uint8_t ** rawImages = mnist_loadImages(imagesFn, &imageData -> nImages,
-        &imageData -> width, &imageData -> height);
-    
-    imageData -> images = mnist_resizeImages(rawImages, imageData -> nImages,
-        &imageData -> width, &imageData -> height, downscale);
-    
-    mnist_deleteImages(rawImages, imageData -> nImages);
-    return imageData;
-}
-
-void ImageData_delete(ImageData * imageData) {
-    mnist_deleteImages(imageData -> images, imageData -> nImages);
-    free(imageData -> labels);
-    free(imageData);
-}
-
 Model * Model_new(int hypervectorSize, int inputQuant, int classVectorQuant,
-    int imageSizeOneDimension) {
+    int featureSize, int nLabels) {
     
     Model * model = (Model*)malloc(sizeof(Model));
 
-    size_t imageSize = imageSizeOneDimension * imageSizeOneDimension;
     model -> downsize = 1;
-    model -> imageSize = imageSize;
+    model -> featureSize = featureSize;
     model -> classVecQuant = classVectorQuant / 2;
     model -> tmpTrainSetValid = false;
 
-    hypervector_newBasis(&model -> basis, hypervectorSize, imageSize, inputQuant);
-    hypervector_blankClassifySet(&model -> classifySet, N_LABELS, hypervectorSize);
+    hypervector_newBasis(&model -> basis, hypervectorSize, featureSize, inputQuant);
+    hypervector_blankClassifySet(&model -> classifySet, nLabels, hypervectorSize);
 
     return model;
 }
 
-int Model_getImageSize(Model * model) {
-    int modelSizeOneDimension = (int)round(sqrt((double)model -> imageSize));
-
-    return modelSizeOneDimension;
+int Model_getFeatureSize(Model * model) {
+    return (int)model -> featureSize;
 }
 
-void Model_train(Model * model, const char * labelsFn, const char * imagesFn,
+void Model_train(Model * model, const char * labelsFn, const char * featuresFn,
     int trainSamples, int retrainIterations) {
 
-    ImageData * imageData = ImageData_load(labelsFn, imagesFn, model -> downsize);
+    Dataset * dataset = Dataset_load(labelsFn, featuresFn, model -> downsize);
 
-    trainAndRetrain(&model -> basis, &model -> classifySet, imageData -> images,
-        imageData -> labels, imageData -> nImages, model -> imageSize,
+    trainAndRetrain(&model -> basis, &model -> classifySet, dataset -> features,
+        dataset -> labels, dataset -> nItems, model -> featureSize,
         trainSamples, retrainIterations, model -> classVecQuant);
 
-    ImageData_delete(imageData);
+    Dataset_delete(dataset);
 }
 
-void Model_trainOneIteration(Model * model, const char * labelsFn, const char * imagesFn,
+void Model_trainOneIteration(Model * model, const char * labelsFn, const char * featuresFn,
     int numTrain) {
 
-    ImageData * imageData = ImageData_load(labelsFn, imagesFn, model -> downsize);
-    uint8_t ** images = imageData -> images;
-    uint8_t * labels = imageData -> labels;
+    Dataset * dataset = Dataset_load(labelsFn, featuresFn, model -> downsize);
+    uint8_t ** features = dataset -> features;
+    uint8_t * labels = dataset -> labels;
 
     size_t length = model -> classifySet.length;
     size_t nLabels = model -> classifySet.nLabels;
-    size_t nImages = imageData -> nImages;
+    size_t nItems = dataset -> nItems;
     size_t quantization = model -> classVecQuant;
 
     Hypervector_Basis * basis = &model -> basis;
@@ -379,46 +351,38 @@ void Model_trainOneIteration(Model * model, const char * labelsFn, const char * 
         retrain = false;
     }
 
-    if (numTrain > nImages) {
-        numTrain = nImages;
+    if (numTrain > nItems) {
+        numTrain = nItems;
     }
 
     size_t i;
 
     // Training
-    parallelTrain(basis, trainSet, classifySet, labels, images, retrain, numTrain);
+    parallelTrain(basis, trainSet, classifySet, labels, features, retrain, numTrain);
     hypervector_deleteClassifySet(classifySet);
     hypervector_newClassifySet(classifySet, trainSet, quantization);
 
-    ImageData_delete(imageData);   
+    Dataset_delete(dataset);   
 }
 
-int Model_classify(Model * model, uint8_t * image) {
+int Model_classify(Model * model, uint8_t * feature) {
 
-    uint8_t ** images = &image;
-    unsigned int width = 28;
-    unsigned int height = 28;
-    uint8_t ** scaledImages = mnist_resizeImages(images, 1, &width, &height, model -> downsize);
-
-    Hypervector_Hypervector vector = hypervector_encode(*scaledImages, &model -> basis);
+    Hypervector_Hypervector vector = hypervector_encode(feature, &model -> basis);
     int classification = hypervector_classify(&model -> classifySet, &vector);
-
-    free(*scaledImages);
-    free(scaledImages);
     hypervector_deleteVector(&vector);
 
     return classification;
 }
 
-int Model_test(Model * model, const char * labelsFn, const char * imagesFn,
+int Model_test(Model * model, const char * labelsFn, const char * featuresFn,
     int testSamples) {
 
-    ImageData * imageData = ImageData_load(labelsFn, imagesFn, model -> downsize);
+    Dataset * dataset = Dataset_load(labelsFn, featuresFn, model -> downsize);
     
-    int nCorrect = test(&model -> classifySet, &model -> basis, imageData -> images,
-        imageData -> labels, imageData -> nImages, testSamples);
+    int nCorrect = test(&model -> classifySet, &model -> basis, dataset -> features,
+        dataset -> labels, dataset -> nItems, testSamples);
 
-    ImageData_delete(imageData);
+    Dataset_delete(dataset);
 
     return nCorrect;
 }

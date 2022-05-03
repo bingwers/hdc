@@ -8,10 +8,10 @@ CFLAGS = -I$(INCLUDE_DIR) -O4 -fPIC
 
 LIBS = -lpthread -lm
 
-_DEPS = model.h mnist.h hypervector.h
+_DEPS = model.h dataset.h hypervector.h
 DEPS =  $(patsubst %,$(INCLUDE_DIR)/%,$(_DEPS))
 
-_OBJ = model.o mnist.o hypervector.o
+_OBJ = model.o dataset.o hypervector.o
 OBJ = $(patsubst %,$(OUTPUT_DIR)/%,$(_OBJ))
 
 all: $(BIN_DIR)/libmodel.so $(BIN_DIR)/imageManip
@@ -22,7 +22,7 @@ $(OUTPUT_DIR)/%.o : $(SOURCE_DIR)/%.c $(DEPS)
 $(BIN_DIR)/libmodel.so : $(OBJ)
 	mkdir -p $(BIN_DIR) && $(CC) -shared -o $@ $^
 
-$(BIN_DIR)/imageManip : $(OUTPUT_DIR)/imageManip.o $(OUTPUT_DIR)/mnist.o
+$(BIN_DIR)/imageManip : $(OUTPUT_DIR)/imageManip.o $(OUTPUT_DIR)/dataset.o
 	mkdir -p $(BIN_DIR) && $(CC) -o $@ $^ $(CFLAGS)
 
 .PHONY: clean
