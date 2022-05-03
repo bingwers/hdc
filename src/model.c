@@ -4,10 +4,11 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <math.h>
+#include <time.h>
+#include <pthread.h>
 #include "model.h"
 #include "dataset.h"
 #include "hypervector.h"
-#include "pthread.h"
 
 struct TrainJob {
     Hypervector_Basis * basis;
@@ -385,6 +386,54 @@ int Model_test(Model * model, const char * labelsFn, const char * featuresFn,
     Dataset_delete(dataset);
 
     return nCorrect;
+}
+
+void Model_benchmark(Model * model, int nTests, double * avgEncodeLatency,
+    double * avgClassifyTime) {
+
+    uint8_t ** features = malloc(sizeof(uint8_t*) * nTests);
+    int featuresSize = model -> featureSize;
+    int i; for (i = 0; i < nTests; i++) {
+        features[i] = malloc(sizeof(uint8_t) * featuresSize);
+        
+        int j; for (j = 0; j < featuresSize; j++) {
+            features[i][j] = rand() & 0xFF;
+        }
+    }
+    Hypervector_Hypervector * vectors =
+        malloc(sizeof(Hypervector_Hypervector) * nTests);
+
+    // encode test
+    clock_t start, end;
+    start = clock();
+
+    for (i = 0; i < nTests; i++) {
+        Hypervector_Hypervector vector = hypervector_encode(features[i], &model -> basis);
+        vectors[i] = vector;
+    }
+
+    end = clock();
+    double totalEncodeTime = (double)(end - start) / CLOCKS_PER_SEC;
+    *avgEncodeLatency = totalEncodeTime / nTests;
+
+    // classify
+    start = clock();
+
+    for (i = 0; i < nTests; i++) {
+        int class = hypervector_classify(&model -> classifySet, &vectors[i]);
+    }
+
+    end = clock();
+    double totalClassifyTime = (double)(end - start) / CLOCKS_PER_SEC;
+    *avgClassifyTime = totalClassifyTime / nTests;
+
+    // clean up
+    for (i = 0; i < nTests; i++) {
+        free(features[i]);
+        hypervector_deleteVector(&vectors[i]);
+    }
+    free(features);
+    free(vectors);
 }
 
 void Model_delete(Model * model) {

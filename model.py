@@ -67,6 +67,22 @@ class Model:
 
         return int(result)
     
+    def benchmark(self, nTests=1000):
+        '''Returns a tuple of the average encode latency and the average
+        classify latench in seconds'''
+
+        avgEncodeLatency = ctypes.c_double()
+        avgClassifyLatency = ctypes.c_double()
+
+        self.lib.Model_benchmark(
+            self.model,
+            ctypes.c_int(nTests),
+            ctypes.byref(avgEncodeLatency),
+            ctypes.byref(avgClassifyLatency)
+        )
+
+        return float(avgEncodeLatency.value), float(avgClassifyLatency.value)
+    
     @staticmethod
     def load(modelFn, model=None):        
         Model.lib.Model_load.restype = ctypes.c_void_p

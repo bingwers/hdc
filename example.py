@@ -10,7 +10,7 @@ model = MNIST_Model(
     classVectorQuant=2, # # of levels to quantize class vectors; the program only
                         # works properly with multiple of 2 values for this;
                         # 0 is a special case that will trigger no quantization
-    imageSize=14 # 28x28 is full size image, works with anything down to 9x9
+    imageSize=28 # 28x28 is full size image, works with anything down to 9x9
 )
 
 print("Training... (this might take a few minutes)")
@@ -27,6 +27,14 @@ nCorrect = model.test(
 )
 
 print(f"Test Accuracy: {100 * nCorrect / 10000:.2f}%")
+
+# Measuring latency for encoding and classification
+# NOTE: benchmark runs a single thread, whereas train and test run 8 threads, so
+# throughput with test will be higher than 1 over the sum of latencies
+
+avgEncodeLatency, avgClassifyLatency = model.benchmark(nTests=1000)
+print(f"Average encode latency: {1000*avgEncodeLatency:.4f}ms")
+print(f"Average classify latency: {1000*avgClassifyLatency:.4f}ms")
 
 # Example Saving and then loading the same model
 
@@ -48,6 +56,7 @@ for i in range(5):
     print(f"Accuracy after {i+1} iterations: {100 * nCorrect / 10000:.2f}%")
 
 # Iterative Training on the ISOLET dataset
+print("\tTraining ISOLET model:")
 model = ISOLET_Model(10000, 64, 2)
 for i in range(10):
     model.trainOneIteration()

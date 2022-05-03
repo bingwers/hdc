@@ -42,6 +42,9 @@ int Model_classify(Model * model, uint8_t * feature);
 int Model_test(Model * model, const char * labelsFn, const char * featuresFn,
     int testSamples);
 
+void Model_benchmark(Model * model, int nTests, double * avgEncodeLatency,
+    double * avgClassifyTime);
+
 void Model_delete(Model * model);
 
 #endif // HDC_MODEL_H
