@@ -1,6 +1,5 @@
 .vscode/**
 a.out
-simResults/**
 **.o
 **.so
 __pycache__/**
