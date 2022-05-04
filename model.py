@@ -4,6 +4,7 @@
 import ctypes
 import pathlib
 import math
+import os
 
 class Model:
     lib = ctypes.CDLL(pathlib.Path().absolute() / "bin" / "libmodel.so")
@@ -82,6 +83,23 @@ class Model:
         )
 
         return float(avgEncodeLatency.value), float(avgClassifyLatency.value)
+
+    def benchThroughput(self, nTests=1000, nThreads=None):
+        if nThreads is None:
+            nThreads = os.cpu_count()
+        
+        encodeThroughput = ctypes.c_double()
+        classifyThroughput = ctypes.c_double()
+
+        self.lib.Model_benchThroughput(
+            self.model,
+            ctypes.c_int(nTests),
+            ctypes.c_int(nThreads),
+            ctypes.byref(encodeThroughput),
+            ctypes.byref(classifyThroughput)
+        )
+
+        return float(encodeThroughput.value), float(classifyThroughput.value)
     
     @staticmethod
     def load(modelFn, model=None):        

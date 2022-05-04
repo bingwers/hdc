@@ -436,6 +436,48 @@ void Model_benchmark(Model * model, int nTests, double * avgEncodeLatency,
     free(vectors);
 }
 
+void * Model_benchThroughputFunc(void * info) {
+    struct BenchmarkThroughputJob * job = (struct BenchmarkThroughputJob*)info;
+
+    Model_benchmark(job -> model, job -> nTests, &job -> encodeTime, &job -> classifyTime);
+    job -> encodeTime *= (double)(job -> nTests);
+    job -> classifyTime *= (double)(job -> nTests);
+
+    return NULL;
+}
+
+void Model_benchThroughput(Model * model, int nTests, int nThreads,
+    double * encodeThroughput, double * classifyThroughput) {
+    struct BenchmarkThroughputJob * jobs =
+        malloc(sizeof(struct BenchmarkThroughputJob) * nThreads);
+
+    int i; for (i = 0; i < nThreads; i++) {
+        jobs[i].model = model;
+        jobs[i].nTests = nTests;
+        pthread_create(&jobs[i].thread, NULL, Model_benchThroughputFunc, &jobs[i]);
+    }
+
+    double encodeTime = 0;
+    double classifyTime = 0;
+
+    for (i = 0; i < nThreads; i++) {
+        pthread_join(jobs[i].thread, NULL);
+        encodeTime += jobs[i].encodeTime;
+        classifyTime += jobs[i].classifyTime;
+    }
+
+    // why we divide by square: one is to take the average; the other is to
+    // adjust for the fact that the test reported system time which includes
+    // all CPUs, so it is inflated by a factor of nThreads
+    encodeTime /= nThreads * nThreads;
+    classifyTime /= nThreads * nThreads;
+
+    *encodeThroughput = (double)nTests * (double)nThreads / encodeTime;
+    *classifyThroughput = (double)nTests * (double)nThreads / classifyTime;
+
+    free(jobs);
+}
+
 void Model_delete(Model * model) {
     hypervector_deleteBasis(&model -> basis);
     hypervector_deleteClassifySet(&model -> classifySet);

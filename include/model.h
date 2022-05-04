@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
+#include <pthread.h>
 
 #include "hypervector.h"
 
@@ -20,6 +21,14 @@ struct Model {
     size_t classVecQuant;
     Hypervector_TrainSet tmpTrainSet;
     bool tmpTrainSetValid;
+};
+
+struct BenchmarkThroughputJob {
+    Model * model;
+    int nTests;
+    double encodeTime;
+    double classifyTime;
+    pthread_t thread;
 };
 
 void Model_save(Model * model, const char * modelFn);
@@ -44,6 +53,9 @@ int Model_test(Model * model, const char * labelsFn, const char * featuresFn,
 
 void Model_benchmark(Model * model, int nTests, double * avgEncodeLatency,
     double * avgClassifyTime);
+
+void Model_benchThroughput(Model * model, int nTests, int nThreads,
+    double * encodeThroughput, double * classifyThroughput);
 
 void Model_delete(Model * model);
 
