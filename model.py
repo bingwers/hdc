@@ -68,7 +68,7 @@ class Model:
 
         return int(result)
     
-    def benchmark(self, nTests=1000):
+    def benchmark(self, nTests=1000, simulateFastClassify=True):
         '''Returns a tuple of the average encode latency and the average
         classify latench in seconds'''
 
@@ -79,12 +79,13 @@ class Model:
             self.model,
             ctypes.c_int(nTests),
             ctypes.byref(avgEncodeLatency),
-            ctypes.byref(avgClassifyLatency)
+            ctypes.byref(avgClassifyLatency),
+            ctypes.c_int(int(fast))
         )
 
         return float(avgEncodeLatency.value), float(avgClassifyLatency.value)
 
-    def benchThroughput(self, nTests=1000, nThreads=None):
+    def benchThroughput(self, nTests=1000, nThreads=None, simulateFastClassify=True):
         if nThreads is None:
             nThreads = os.cpu_count()
         
@@ -96,7 +97,8 @@ class Model:
             ctypes.c_int(nTests),
             ctypes.c_int(nThreads),
             ctypes.byref(encodeThroughput),
-            ctypes.byref(classifyThroughput)
+            ctypes.byref(classifyThroughput),
+            ctypes.c_int(int(fast))
         )
 
         return float(encodeThroughput.value), float(classifyThroughput.value)

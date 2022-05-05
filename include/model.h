@@ -26,6 +26,7 @@ struct Model {
 struct BenchmarkThroughputJob {
     Model * model;
     int nTests;
+    int fast;
     double encodeTime;
     double classifyTime;
     pthread_t thread;
@@ -52,10 +53,10 @@ int Model_test(Model * model, const char * labelsFn, const char * featuresFn,
     int testSamples);
 
 void Model_benchmark(Model * model, int nTests, double * avgEncodeLatency,
-    double * avgClassifyTime);
+    double * avgClassifyTime, int fast);
 
 void Model_benchThroughput(Model * model, int nTests, int nThreads,
-    double * encodeThroughput, double * classifyThroughput);
+    double * encodeThroughput, double * classifyThroughput, int fast);
 
 void Model_delete(Model * model);
 

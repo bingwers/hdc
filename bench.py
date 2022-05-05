@@ -19,10 +19,10 @@ for name, model in [("MNIST", mnistModel), ("ISOLET", isoletModel)]:
     print(f"Benchmark results for {name} model:")
 
     print(f"\tEncode latency: {1000*avgEncodeLatency:.4f}ms/input")
-    print(f"\tClassify latency: {1000*avgClassifyLatency:.4f}ms/input")
+    print(f"\tClassify latency: {1000000*avgClassifyLatency:.4f}us/input")
     print(f"\tTotal throughput (all cores): {totalThroughput:.2f} inputs/s")
     print(f"\tEncode energy: {encodeEnergy*1000:.4f}mJ/input")
-    print(f"\tClassify energy: {classifyEnergy*1000:.4f}mJ/input")
+    print(f"\tClassify energy: {classifyEnergy*1000000:.4f}uJ/input")
     print()
 
 

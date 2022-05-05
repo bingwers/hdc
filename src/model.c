@@ -388,8 +388,66 @@ int Model_test(Model * model, const char * labelsFn, const char * featuresFn,
     return nCorrect;
 }
 
+int Model_fastClassifyBenchmark(Model * model, Hypervector_Hypervector * vectors,
+    int nVecs, double * time) {
+
+    Hypervector_Hypervector * classVecs = 
+        malloc(sizeof(Hypervector_Hypervector)*model -> classifySet.nLabels);
+
+    // just leave them with random memory -- won't matter for speed
+    int i; for (i = 0; i < model -> classifySet.nLabels; i++) {
+        hypervector_newVector(&classVecs[i], model -> classifySet.length);
+    }
+
+    int nLabels = model -> classifySet.nLabels;
+    int length = model -> classifySet.length;
+    int lengthQwords = length / 64 + 1;
+
+    clock_t start, end;
+    start = clock();
+
+    int best;
+    int k; for (k = 0; k < nVecs; k++) {
+        uint64_t bestSim = INT32_MAX;
+        best = -1;
+
+        uint64_t * hv1 = (uint64_t *)(vectors[k].elems);
+        for (i = 0; i < nLabels; i++) {
+            int32_t acc = 0;
+            uint32_t * hv2 = (uint32_t *)(classVecs[i].elems);
+            int j; for (j = 0; j < lengthQwords; j++) {
+                uint64_t xor = hv1[j] ^ hv2[j];
+                //acc = acc + __builtin_popcount((uint32_t)xor) + __builtin_popcount(xor >> 32);
+                
+                int64_t popcnt;
+                asm (
+                    "popcnt %1, %0;"
+                    : "=r"(popcnt)
+                    : "r"(xor)
+                );
+
+                acc += popcnt;
+            }
+
+            if (acc < bestSim) {
+                bestSim = acc;
+                best = i;
+            }
+        }
+    }
+
+    end = clock();
+    *time = (double)(end - start) / CLOCKS_PER_SEC;
+
+    for (i = 0; i < model -> classifySet.nLabels; i++) {
+        hypervector_deleteVector(&classVecs[i]);
+    }
+
+    return best;
+}
+
 void Model_benchmark(Model * model, int nTests, double * avgEncodeLatency,
-    double * avgClassifyTime) {
+    double * avgClassifyTime, int fast) {
 
     uint8_t ** features = malloc(sizeof(uint8_t*) * nTests);
     int featuresSize = model -> featureSize;
@@ -417,14 +475,22 @@ void Model_benchmark(Model * model, int nTests, double * avgEncodeLatency,
     *avgEncodeLatency = totalEncodeTime / nTests;
 
     // classify
-    start = clock();
+    double totalClassifyTime;
 
-    for (i = 0; i < nTests; i++) {
-        int class = hypervector_classify(&model -> classifySet, &vectors[i]);
+    if (fast) {
+        Model_fastClassifyBenchmark(model, vectors, nTests, &totalClassifyTime);
+    }
+    else {
+        start = clock();
+
+        for (i = 0; i < nTests; i++) {
+            int class = hypervector_classify(&model -> classifySet, &vectors[i]);
+        }
+
+        end = clock();
+        double totalClassifyTime = (double)(end - start) / CLOCKS_PER_SEC;
     }
 
-    end = clock();
-    double totalClassifyTime = (double)(end - start) / CLOCKS_PER_SEC;
     *avgClassifyTime = totalClassifyTime / nTests;
 
     // clean up
@@ -439,7 +505,7 @@ void Model_benchmark(Model * model, int nTests, double * avgEncodeLatency,
 void * Model_benchThroughputFunc(void * info) {
     struct BenchmarkThroughputJob * job = (struct BenchmarkThroughputJob*)info;
 
-    Model_benchmark(job -> model, job -> nTests, &job -> encodeTime, &job -> classifyTime);
+    Model_benchmark(job -> model, job -> nTests, &job -> encodeTime, &job -> classifyTime, job -> fast);
     job -> encodeTime *= (double)(job -> nTests);
     job -> classifyTime *= (double)(job -> nTests);
 
@@ -447,13 +513,14 @@ void * Model_benchThroughputFunc(void * info) {
 }
 
 void Model_benchThroughput(Model * model, int nTests, int nThreads,
-    double * encodeThroughput, double * classifyThroughput) {
+    double * encodeThroughput, double * classifyThroughput, int fast) {
     struct BenchmarkThroughputJob * jobs =
         malloc(sizeof(struct BenchmarkThroughputJob) * nThreads);
 
     int i; for (i = 0; i < nThreads; i++) {
         jobs[i].model = model;
         jobs[i].nTests = nTests;
+        jobs[i].fast = fast;
         pthread_create(&jobs[i].thread, NULL, Model_benchThroughputFunc, &jobs[i]);
     }
 
