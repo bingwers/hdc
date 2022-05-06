@@ -80,7 +80,7 @@ class Model:
             ctypes.c_int(nTests),
             ctypes.byref(avgEncodeLatency),
             ctypes.byref(avgClassifyLatency),
-            ctypes.c_int(int(fast))
+            ctypes.c_int(int(simulateFastClassify))
         )
 
         return float(avgEncodeLatency.value), float(avgClassifyLatency.value)
@@ -98,7 +98,7 @@ class Model:
             ctypes.c_int(nThreads),
             ctypes.byref(encodeThroughput),
             ctypes.byref(classifyThroughput),
-            ctypes.c_int(int(fast))
+            ctypes.c_int(int(simulateFastClassify))
         )
 
         return float(encodeThroughput.value), float(classifyThroughput.value)
